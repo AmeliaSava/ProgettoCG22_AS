@@ -17,11 +17,11 @@ FollowFromUpCamera = function(){
       let target = glMatrix.vec3.create();
       let up = glMatrix.vec4.create();
       
-      glMatrix.vec3.transformMat4(eye, [0,20,0], this.frame);
-      glMatrix.vec3.transformMat4(target, [0.0,0.0,0.0,1.0], this.frame);
+      glMatrix.vec3.transformMat4(eye, [0,50,0], this.frame);
+      glMatrix.vec3.transformMat4(target, [0.0,0,0.0,1.0], this.frame);
       glMatrix.vec4.transformMat4(up, [0.0,0.0,-1,0.0], this.frame);
       
-      return glMatrix.mat4.lookAt(glMatrix.mat4.create(),eye,target,up.slice(0,3));	
+      return glMatrix.mat4.lookAt(glMatrix.mat4.create(),eye,target,up);	
     }
 }
 
@@ -45,30 +45,41 @@ ChaseCamera = function(){
     glMatrix.vec3.transformMat4(target, [0.0,0.0,0.0,1.0], this.frame);
     glMatrix.vec4.transformMat4(up, [0.0,0.0,-1,0.0], this.frame);
     
-    return glMatrix.mat4.lookAt(glMatrix.mat4.create(),eye,target,up.slice(0,3));	
+    return glMatrix.mat4.lookAt(glMatrix.mat4.create(),eye,target,up);	
   }
 }
 
 UserCamera = function(){
 
-  /* the only data it needs is the position of the camera */
-  this.frame = glMatrix.mat4.create();
+  let move = glMatrix.vec3.fromValues(0,10,30);
+  mouseX = 0;
+  mouseY = 0;
   
-  /* update the camera with the current car position */
+  /* update the camera */
   this.update = function(car_position){
-    this.frame = car_position;
+    if(Renderer.car.control_keys["ArrowUp"])
+    glMatrix.vec3.add(move, move, [0,-1,0]);
+    if(Renderer.car.control_keys["ArrowDown"])
+    glMatrix.vec3.add(move, move, [0,1,0]);
+    if(Renderer.car.control_keys["ArrowLeft"])
+    glMatrix.vec3.add(move, move, [1,0,0]);
+    if(Renderer.car.control_keys["ArrowRight"])
+    glMatrix.vec3.add(move, move, [-1,0,0]);
+    
   }
 
   /* return the transformation matrix to transform from worlod coordiantes to the view reference frame */
   this.matrix = function(){
-    let eye = glMatrix.vec3.create();
-    let target = glMatrix.vec3.create();
-    let up = glMatrix.vec4.create();
-    
-    glMatrix.vec3.transformMat4(eye, [5,10,10], this.frame);
-    glMatrix.vec3.transformMat4(target, [0.0,0.0,0.0,1.0], this.frame);
-    glMatrix.vec4.transformMat4(up, [0.0,0.0,-1,0.0], this.frame);
-    
+    this.frame = glMatrix.mat4.create();
+  // point of view
+  let eye = glMatrix.vec3.create();
+  // where to look
+  let target = glMatrix.vec3.create();
+  // camera orientation
+  let up = glMatrix.vec4.create();
+  glMatrix.vec3.transformMat4(eye, move, this.frame);
+  glMatrix.vec3.transformMat4(target, [0.0,0.0,0.0,1.0], this.frame);
+  glMatrix.vec4.transformMat4(up, [0.0,1.0,0,0.0], glMatrix.mat4.create());
     return glMatrix.mat4.lookAt(glMatrix.mat4.create(),eye,target,up.slice(0,3));	
   }
 }
@@ -93,6 +104,11 @@ Renderer.createObjectBuffers = function (gl, obj) {
   obj.vertexBuffer = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, obj.vertexBuffer);
   gl.bufferData(gl.ARRAY_BUFFER, obj.vertices, gl.STATIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+  obj.normalBuffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, obj.normalBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, obj.normals, gl.STATIC_DRAW);
   gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
   obj.indexBufferTriangles = gl.createBuffer();
@@ -121,25 +137,21 @@ Renderer.createObjectBuffers = function (gl, obj) {
 draw an object as specified in common/shapes/triangle.js for which the buffer 
 have alrady been created
 */
-Renderer.drawObject = function (gl, obj, fillColor, lineColor) {
-
+Renderer.drawObject = function (gl, obj, fillColor) {
   gl.bindBuffer(gl.ARRAY_BUFFER, obj.vertexBuffer);
   gl.enableVertexAttribArray(this.uniformShader.aPositionIndex);
   gl.vertexAttribPointer(this.uniformShader.aPositionIndex, 3, gl.FLOAT, false, 0, 0);
-
-  gl.enable(gl.POLYGON_OFFSET_FILL);
-  gl.polygonOffset(1.0, 1.0);
+  
+  gl.bindBuffer(gl.ARRAY_BUFFER, obj.normalBuffer);
+  gl.enableVertexAttribArray(this.uniformShader.aNormalIndex);
+  gl.vertexAttribPointer(this.uniformShader.aNormalIndex, 3, gl.FLOAT, false, 0, 0);
 
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, obj.indexBufferTriangles);
-  gl.uniform4fv(this.uniformShader.uColorLocation, fillColor);
+
+  gl.uniform3fv(this.uniformShader.uColorLocation, fillColor);
+
   gl.drawElements(gl.TRIANGLES, obj.triangleIndices.length, gl.UNSIGNED_SHORT, 0);
-
-  gl.disable(gl.POLYGON_OFFSET_FILL);
   
-  gl.uniform4fv(this.uniformShader.uColorLocation, lineColor);
-  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, obj.indexBufferEdges);
-  gl.drawElements(gl.LINES, obj.numTriangles * 3 * 2, gl.UNSIGNED_SHORT, 0);
-
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
   gl.disableVertexAttribArray(this.uniformShader.aPositionIndex);
   gl.bindBuffer(gl.ARRAY_BUFFER, null);
@@ -153,18 +165,26 @@ Renderer.initializeObjects = function (gl) {
   this.car = Game.addCar("cubecar");
 
   Renderer.triangle = new Triangle();
+  ComputeNormals(Renderer.triangle);
   Renderer.createObjectBuffers(gl, this.triangle);
 
   Renderer.cube = new Cube();
+  ComputeNormals(Renderer.cube);
   Renderer.createObjectBuffers(gl, this.cube);
 
   Renderer.cylinder = new Cylinder(10);
+  ComputeNormals(Renderer.cylinder);
   Renderer.createObjectBuffers(gl, this.cylinder);
   
+  ComputeNormals(Game.scene.trackObj);
   Renderer.createObjectBuffers(gl,Game.scene.trackObj);
+  ComputeNormals(Game.scene.groundObj);
   Renderer.createObjectBuffers(gl,Game.scene.groundObj);
-  for (var i = 0; i < Game.scene.buildings.length; ++i) 
+  for (var i = 0; i < Game.scene.buildings.length; ++i){ 
+      ComputeNormals(Game.scene.buildingsObj[i]);
 	  	Renderer.createObjectBuffers(gl,Game.scene.buildingsObj[i]);
+  }
+
 };
 
 /*
@@ -186,8 +206,8 @@ Renderer.drawCar = function (gl) {
   
   Renderer.stack.push();
   Renderer.stack.multiply(cube_mat);
-  gl.uniformMatrix4fv(this.uniformShader.uModelViewMatrixLocation, false, this.stack.matrix);
-  this.drawObject(gl, this.cube, [0.9, 0, 0.1, 1], [0, 1, 0, 1]);
+  gl.uniformMatrix4fv(this.uniformShader.uModelViewLocation, false, this.stack.matrix);
+  this.drawObject(gl, this.cube, [0.9, 0, 0.1]);
   Renderer.stack.pop();
 
   pipe_mat = glMatrix.mat4.create();
@@ -205,8 +225,8 @@ Renderer.drawCar = function (gl) {
   
   Renderer.stack.push();
   Renderer.stack.multiply(cube_mat);
-  gl.uniformMatrix4fv(this.uniformShader.uModelViewMatrixLocation, false, this.stack.matrix);
-  this.drawObject(gl, this.cylinder, [0,0.2,0.5,1], [0, 1, 0, 1]);
+  gl.uniformMatrix4fv(this.uniformShader.uModelViewLocation, false, this.stack.matrix);
+  this.drawObject(gl, this.cylinder, [0,0.2,0.5]);
   Renderer.stack.pop();
 
   cabin_mat = glMatrix.mat4.create();
@@ -224,8 +244,8 @@ Renderer.drawCar = function (gl) {
   
   Renderer.stack.push();
   Renderer.stack.multiply(cube_mat);
-  gl.uniformMatrix4fv(this.uniformShader.uModelViewMatrixLocation, false, this.stack.matrix);
-  this.drawObject(gl, this.cube, [0.2,0.9,1, 1], [0, 1, 0, 1]);
+  gl.uniformMatrix4fv(this.uniformShader.uModelViewLocation, false, this.stack.matrix);
+  this.drawObject(gl, this.cube, [0.2,0.9,1]);
   Renderer.stack.pop();
 
   // wheels
@@ -255,8 +275,8 @@ Renderer.drawCar = function (gl) {
   
   Renderer.stack.push();
   Renderer.stack.multiply(cube_mat);
-  gl.uniformMatrix4fv(this.uniformShader.uModelViewMatrixLocation, false, this.stack.matrix);
-  this.drawObject(gl, this.cylinder, [0.1, 0, 0, 1], [0, 1, 0, 1]);
+  gl.uniformMatrix4fv(this.uniformShader.uModelViewLocation, false, this.stack.matrix);
+  this.drawObject(gl, this.cylinder, [0.1, 0, 0]);
   Renderer.stack.pop();
 
   glMatrix.mat4.fromTranslation(translate_matrix,[2.8,1.6,-2.1]);
@@ -264,8 +284,8 @@ Renderer.drawCar = function (gl) {
 
   Renderer.stack.push();
   Renderer.stack.multiply(cube_mat);
-  gl.uniformMatrix4fv(this.uniformShader.uModelViewMatrixLocation, false, this.stack.matrix);
-  this.drawObject(gl, this.cylinder, [0.1, 0, 0, 1], [0, 1, 0, 1]);
+  gl.uniformMatrix4fv(this.uniformShader.uModelViewLocation, false, this.stack.matrix);
+  this.drawObject(gl, this.cylinder, [0.1, 0, 0]);
   Renderer.stack.pop(); 
 
   // back wheels
@@ -278,8 +298,8 @@ Renderer.drawCar = function (gl) {
   
   Renderer.stack.push();
   Renderer.stack.multiply(cube_mat);
-  gl.uniformMatrix4fv(this.uniformShader.uModelViewMatrixLocation, false, this.stack.matrix);
-  this.drawObject(gl, this.cylinder, [0.1, 0, 0, 1], [0, 1, 0, 1]);
+  gl.uniformMatrix4fv(this.uniformShader.uModelViewLocation, false, this.stack.matrix);
+  this.drawObject(gl, this.cylinder, [0.1, 0, 0]);
   Renderer.stack.pop();
 
   glMatrix.mat4.fromTranslation(translate_matrix,[3,1.6,1.5]);
@@ -287,14 +307,16 @@ Renderer.drawCar = function (gl) {
 
   Renderer.stack.push();
   Renderer.stack.multiply(cube_mat);
-  gl.uniformMatrix4fv(this.uniformShader.uModelViewMatrixLocation, false, this.stack.matrix);
-  this.drawObject(gl, this.cylinder, [0.1, 0, 0, 1], [0, 1, 0, 1]);
+  gl.uniformMatrix4fv(this.uniformShader.uModelViewLocation, false, this.stack.matrix);
+  this.drawObject(gl, this.cylinder, [0.1, 0, 0]);
   Renderer.stack.pop();
 };
 
 
 Renderer.drawScene = function (gl) {
 
+  if (Renderer.currentCamera == 2)
+		console.log("we");
   var width = this.canvas.width;
   var height = this.canvas.height
   var ratio = width / height;
@@ -311,6 +333,9 @@ Renderer.drawScene = function (gl) {
   gl.useProgram(this.uniformShader);
   
   gl.uniformMatrix4fv(this.uniformShader.uProjectionMatrixLocation, false,glMatrix.mat4.perspective(glMatrix.mat4.create(),3.14 / 4, ratio, 1, 500));
+  // TODO
+  Game.scene.weather.sunLightDirection = [0.5,0.5,0.0];
+  gl.uniform3fv(this.uniformShader.uLightDirectionLocation, Game.scene.weather.sunLightDirection);
 
   Renderer.cameras[Renderer.currentCamera].update(this.car.frame);
   var invV = Renderer.cameras[Renderer.currentCamera].matrix();
@@ -327,13 +352,13 @@ Renderer.drawScene = function (gl) {
   this.drawCar(gl);
   this.stack.pop();
 
-  gl.uniformMatrix4fv(this.uniformShader.uModelViewMatrixLocation, false, this.stack.matrix);
-
+  gl.uniformMatrix4fv(this.uniformShader.uModelViewLocation, false, this.stack.matrix);
+  gl.uniformMatrix4fv(this.uniformShader.uViewMatrixLocation, false, invV);
   // drawing the static elements (ground, track and buldings)
-	this.drawObject(gl, Game.scene.groundObj, [0.3, 0.7, 0.2, 1.0], [0, 0, 0, 1.0]);
- 	this.drawObject(gl, Game.scene.trackObj, [0.9, 0.8, 0.7, 1.0], [0, 0, 0, 1.0]);
+	this.drawObject(gl, Game.scene.groundObj, [0.3, 0.7, 0.2]);
+ 	this.drawObject(gl, Game.scene.trackObj, [0.9, 0.8, 0.7]);
 	for (var i in Game.scene.buildingsObj) 
-		this.drawObject(gl, Game.scene.buildingsObj[i], [0.8, 0.8, 0.8, 1.0], [0.2, 0.2, 0.2, 1.0]);
+		this.drawObject(gl, Game.scene.buildingsObj[i], [0.8, 0.8, 0.8]);
 	gl.useProgram(null);
 };
 
@@ -351,6 +376,8 @@ Renderer.setupAndStart = function () {
   
  /* get the webgl context */
 	Renderer.gl = Renderer.canvas.getContext("webgl");
+
+  Renderer.gl.getExtension('OES_standard_derivatives');
 
   /* read the webgl version and log */
 	var gl_version = Renderer.gl.getParameter(Renderer.gl.VERSION); 
@@ -371,21 +398,32 @@ Renderer.setupAndStart = function () {
   add listeners for the mouse / keyboard events
   */
   Renderer.canvas.addEventListener('mousemove',on_mouseMove,false);
-  Renderer.canvas.addEventListener('click', on_mouseClick,false);
+  Renderer.canvas.addEventListener('mouseup', on_mouseup,false);
+  Renderer.canvas.addEventListener('mousedown', on_mouseup,false);
   Renderer.canvas.addEventListener('keydown',on_keydown,false);
   Renderer.canvas.addEventListener('keyup',on_keyup,false);
 
   Renderer.Display();
 }
 
-on_mouseMove = function(e){}
+on_mouseup = function(e) {
 
-on_mouseClick = function(e){
+}
+on_mousedown = function(e) {
+
+}
+on_mouseMove = function(e){
+  Renderer.cameras[2].mouseX = e.clientX;
+  Renderer.cameras[2].mouseY = e.clientY;
+}
+
+on_ekey = function(){
   if(Renderer.currentCamera != 2) Renderer.currentCamera ++;
   else Renderer.currentCamera = 0;
 }
 
 on_keyup = function(e){
+  if(e.key == 'e') on_ekey();
 	Renderer.car.control_keys[e.key] = false;
 }
 on_keydown = function(e){
