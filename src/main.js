@@ -1,5 +1,5 @@
-/*car_position
-the FollowFromUpCamera always look at the car from a position abova right over the car
+/*
+* The FollowFromUpCamera always look at the car from a position abova right over the car
 */
 FollowFromUpCamera = function(){
 
@@ -51,21 +51,27 @@ ChaseCamera = function(){
 
 UserCamera = function(){
 
-  let move = glMatrix.vec3.fromValues(0,10,30);
+  let moveeye = glMatrix.vec3.fromValues(30,10,0);
+  let movetarget = glMatrix.vec3.fromValues(0,0,0);
+  let moveup = glMatrix.vec3.fromValues(0,0,0);
+  
   mouseX = 0;
   mouseY = 0;
   
   /* update the camera */
   this.update = function(car_position){
     if(Renderer.car.control_keys["ArrowUp"])
-    glMatrix.vec3.add(move, move, [0,-1,0]);
+    glMatrix.vec3.add(moveeye, moveeye, [0,-1,0]);
     if(Renderer.car.control_keys["ArrowDown"])
-    glMatrix.vec3.add(move, move, [0,1,0]);
+    glMatrix.vec3.add(moveeye, moveeye, [0,1,0]);
     if(Renderer.car.control_keys["ArrowLeft"])
-    glMatrix.vec3.add(move, move, [1,0,0]);
+    glMatrix.vec3.add(moveeye, moveeye, [1,0,0]);
     if(Renderer.car.control_keys["ArrowRight"])
-    glMatrix.vec3.add(move, move, [-1,0,0]);
-    
+    glMatrix.vec3.add(moveeye, moveeye, [-1,0,0]);
+    if(Renderer.car.control_keys["r"])
+    glMatrix.vec3.add(moveeye, moveeye, [0,-1,0]);
+    if(Renderer.car.control_keys["f"])
+    glMatrix.vec3.add(moveeye, moveeye, [0,1,0]);    
   }
 
   /* return the transformation matrix to transform from worlod coordiantes to the view reference frame */
@@ -75,11 +81,12 @@ UserCamera = function(){
   let eye = glMatrix.vec3.create();
   // where to look
   let target = glMatrix.vec3.create();
+  glMatrix.vec3.add(target, target, movetarget);
   // camera orientation
   let up = glMatrix.vec4.create();
-  glMatrix.vec3.transformMat4(eye, move, this.frame);
-  glMatrix.vec3.transformMat4(target, [0.0,0.0,0.0,1.0], this.frame);
-  glMatrix.vec4.transformMat4(up, [0.0,1.0,0,0.0], glMatrix.mat4.create());
+  glMatrix.vec3.transformMat4(eye, moveeye, this.frame);
+  glMatrix.vec3.transformMat4(target, [1.0,0.0,0.0,1.0], this.frame);
+  glMatrix.vec4.transformMat4(up, [0.0,1.0,0.0,0.0], glMatrix.mat4.create());
     return glMatrix.mat4.lookAt(glMatrix.mat4.create(),eye,target,up.slice(0,3));	
   }
 }
@@ -106,10 +113,26 @@ Renderer.createObjectBuffers = function (gl, obj) {
   gl.bufferData(gl.ARRAY_BUFFER, obj.vertices, gl.STATIC_DRAW);
   gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
-  obj.normalBuffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, obj.normalBuffer);
-  gl.bufferData(gl.ARRAY_BUFFER, obj.normals, gl.STATIC_DRAW);
-  gl.bindBuffer(gl.ARRAY_BUFFER, null);
+  if(typeof obj.normals != 'undefined'){
+    obj.normalBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, obj.normalBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, obj.normals, gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+  }
+
+  // Textures
+  if(typeof obj.texCoords != 'undefined'){
+    obj.texCoordsBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, obj.texCoordsBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, obj.texCoords, gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+  }
+  if(typeof obj.tangents != 'undefined'){
+    obj.tangentsBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, obj.tangentsBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, obj.tangents, gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+  }
 
   obj.indexBufferTriangles = gl.createBuffer();
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, obj.indexBufferTriangles);
@@ -138,6 +161,7 @@ draw an object as specified in common/shapes/triangle.js for which the buffer
 have alrady been created
 */
 Renderer.drawObject = function (gl, obj, fillColor) {
+
   gl.bindBuffer(gl.ARRAY_BUFFER, obj.vertexBuffer);
   gl.enableVertexAttribArray(this.uniformShader.aPositionIndex);
   gl.vertexAttribPointer(this.uniformShader.aPositionIndex, 3, gl.FLOAT, false, 0, 0);
@@ -146,11 +170,30 @@ Renderer.drawObject = function (gl, obj, fillColor) {
   gl.enableVertexAttribArray(this.uniformShader.aNormalIndex);
   gl.vertexAttribPointer(this.uniformShader.aNormalIndex, 3, gl.FLOAT, false, 0, 0);
 
+  if(typeof obj.texCoords != 'undefined'){
+    gl.uniform1i(this.uniformShader.uTextModeLocation, 1);
+    gl.bindBuffer(gl.ARRAY_BUFFER, obj.texCoordsBuffer);	
+    gl.enableVertexAttribArray(this.uniformShader.aTexCoordsIndex);
+    gl.vertexAttribPointer(this.uniformShader.aTexCoordsIndex, 2, gl.FLOAT, false, 0, 0);
+  } else {
+        gl.uniform1i(this.uniformShader.uTextModeLocation, 0);
+        gl.disableVertexAttribArray(this.uniformShader.aTexCoordsIndex);
+  }
+
+  if( typeof obj.tangentsBuffer != 'undefined'){ 
+    gl.bindBuffer(gl.ARRAY_BUFFER, obj.tangentsBuffer);
+    gl.enableVertexAttribArray(this.uniformShader.aTangentsIndex);
+    gl.vertexAttribPointer(this.uniformShader.aTangentsIndex, 3, gl.FLOAT, false, 0, 0);
+  }
+
+  gl.enable(gl.POLYGON_OFFSET_FILL);
+  gl.polygonOffset(1.0, 1.0);
+
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, obj.indexBufferTriangles);
-
   gl.uniform3fv(this.uniformShader.uColorLocation, fillColor);
-
   gl.drawElements(gl.TRIANGLES, obj.triangleIndices.length, gl.UNSIGNED_SHORT, 0);
+
+  gl.disable(gl.POLYGON_OFFSET_FILL);
   
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
   gl.disableVertexAttribArray(this.uniformShader.aPositionIndex);
@@ -180,12 +223,40 @@ Renderer.initializeObjects = function (gl) {
   Renderer.createObjectBuffers(gl,Game.scene.trackObj);
   ComputeNormals(Game.scene.groundObj);
   Renderer.createObjectBuffers(gl,Game.scene.groundObj);
-  for (var i = 0; i < Game.scene.buildings.length; ++i){ 
-      ComputeNormals(Game.scene.buildingsObj[i]);
-	  	Renderer.createObjectBuffers(gl,Game.scene.buildingsObj[i]);
-  }
 
+  for (var i = 0; i < Game.scene.buildings.length; ++i){ 
+    ComputeNormals(Game.scene.buildingsObjTex[i]);
+    Renderer.createObjectBuffers(gl,Game.scene.buildingsObjTex[i]);
+    ComputeNormals(Game.scene.buildingsObjTex[i].roof);
+    Renderer.createObjectBuffers(gl, Game.scene.buildingsObjTex[i].roof)
+  }
+  
+  Renderer.loadTexture(gl,0,"../common/texture/street4.png");
+  Renderer.loadTexture(gl,1,"../common/texture/facade1.jpg");
+  Renderer.loadTexture(gl,2,"../common/texture/facade2.jpg");
+  Renderer.loadTexture(gl,3,"../common/texture/facade3.jpg");
+  Renderer.loadTexture(gl,4,"../common/texture/roof.jpg");
+  Renderer.loadTexture(gl,5,"../common/texture/grass_tile.png");
+  Renderer.loadTexture(gl,6,"../common/texture/headlight.png");
 };
+
+Renderer.loadTexture = function (gl,tu, url){
+  var image = new Image();
+  image.src = url;
+  image.addEventListener('load',function(){	
+      gl.activeTexture(gl.TEXTURE0+tu);
+      var texture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D,texture);
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,image);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.REPEAT);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.REPEAT);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR)
+      //TODO
+      //gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_NEAREST);
+      //gl.generateMipmap(gl.TEXTURE_2D);
+  });
+} 
 
 /*
 draw the car
@@ -315,8 +386,6 @@ Renderer.drawCar = function (gl) {
 
 Renderer.drawScene = function (gl) {
 
-  if (Renderer.currentCamera == 2)
-		console.log("we");
   var width = this.canvas.width;
   var height = this.canvas.height
   var ratio = width / height;
@@ -333,8 +402,6 @@ Renderer.drawScene = function (gl) {
   gl.useProgram(this.uniformShader);
   
   gl.uniformMatrix4fv(this.uniformShader.uProjectionMatrixLocation, false,glMatrix.mat4.perspective(glMatrix.mat4.create(),3.14 / 4, ratio, 1, 500));
-  // TODO
-  Game.scene.weather.sunLightDirection = [0.5,0.5,0.0];
   gl.uniform3fv(this.uniformShader.uLightDirectionLocation, Game.scene.weather.sunLightDirection);
 
   Renderer.cameras[Renderer.currentCamera].update(this.car.frame);
@@ -351,14 +418,52 @@ Renderer.drawScene = function (gl) {
   this.stack.multiply(this.car.frame);
   this.drawCar(gl);
   this.stack.pop();
-
+  
+  gl.uniformMatrix4fv(this.uniformShader.uModelLocation, false, this.car.frame);
   gl.uniformMatrix4fv(this.uniformShader.uModelViewLocation, false, this.stack.matrix);
   gl.uniformMatrix4fv(this.uniformShader.uViewMatrixLocation, false, invV);
+
   // drawing the static elements (ground, track and buldings)
+  gl.uniform1i(this.uniformShader.uSamplerLocation,5);
 	this.drawObject(gl, Game.scene.groundObj, [0.3, 0.7, 0.2]);
+  gl.uniform1i(this.uniformShader.uSamplerLocation,0);
  	this.drawObject(gl, Game.scene.trackObj, [0.9, 0.8, 0.7]);
-	for (var i in Game.scene.buildingsObj) 
-		this.drawObject(gl, Game.scene.buildingsObj[i], [0.8, 0.8, 0.8]);
+  
+	for (var i in Game.scene.buildingsObj) {
+    if(i%2 == 0) gl.uniform1i(this.uniformShader.uSamplerLocation,1);
+    else if(i == 3 || i == 7) gl.uniform1i(this.uniformShader.uSamplerLocation,2);
+          else gl.uniform1i(this.uniformShader.uSamplerLocation,3);
+    this.drawObject(gl, Game.scene.buildingsObjTex[i], [0.8, 0.8, 0.8]);
+  }
+		
+  gl.uniform1i(this.uniformShader.uSamplerLocation,4);
+  for (var i in Game.scene.buildingsObj) 
+    this.drawObject(gl, Game.scene.buildingsObjTex[i].roof, [0.9, 0.8, 0.7]);
+  
+  // drawing lamps
+  let lamp_mat = glMatrix.mat4.create();
+  let light_mat = glMatrix.mat4.create();
+   
+  for (var i = 0; i < Game.scene.lamps.length; ++i) {
+    glMatrix.mat4.identity(lamp_mat);
+    Renderer.stack.push();
+    Renderer.stack.multiply(glMatrix.mat4.fromTranslation(lamp_mat,Game.scene.lamps[i].position));
+    Renderer.stack.multiply(glMatrix.mat4.fromScaling(lamp_mat, [0.2, 4, 0.2]));
+    gl.uniformMatrix4fv(this.uniformShader.uModelViewLocation, false, this.stack.matrix);
+    this.drawObject(gl, this.cylinder, [0.0, 0.0, 0.0]);
+    Renderer.stack.pop();
+    let lamp_pos = glMatrix.vec3.create();
+    glMatrix.vec3.add(lamp_pos, Game.scene.lamps[i].position, [0.0, 6.0, 0.0]);
+    glMatrix.mat4.identity(light_mat);
+    Renderer.stack.push();
+    Renderer.stack.multiply(glMatrix.mat4.fromTranslation(light_mat, lamp_pos));
+    Renderer.stack.multiply(glMatrix.mat4.fromScaling(light_mat, [0.5, 0.5, 0.5]));
+    gl.uniformMatrix4fv(this.uniformShader.uModelViewLocation, false, this.stack.matrix);
+    this.drawObject(gl, this.cube, [1, 1, 1]);
+    Renderer.stack.pop();
+    gl.uniform3fv(this.uniformShader.uLampPositionsLocation, lamp_pos);
+  }
+
 	gl.useProgram(null);
 };
 

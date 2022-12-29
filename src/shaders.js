@@ -4,13 +4,17 @@ uniformShader = function (gl) {
       uniform   mat4 uViewMatrix; 
       // transformation from object space to view space              
       uniform   mat4 uModelViewMatrix;
+      uniform mat4 uModelMatrix;
   
       // light direction
       uniform vec3 uLightDirection;
+      // point lights
+      uniform vec3 uLampPositions[12];
       uniform vec3 uColor;
   
       attribute vec3 aPosition;
       attribute vec3 aNormal;
+      attribute vec2 aTexCoords;
   
       // computed color to be interpolated 
       varying vec3 vShadedColor;  
@@ -19,12 +23,21 @@ uniformShader = function (gl) {
       varying vec3 vPosVS;
       // transformed light direction in view space
       varying vec3 vLVS;
+      varying vec3 vLPVS[12];
+      varying vec3 vLampDirVS;
 
       // view direction to be interpolated
       varying vec3 vViewVS;
+
+      varying vec2 vTexCoords; 
   
       void main(void)                                
       {    
+        for(int i = 0; i < 12; i++) {
+          vLPVS[i] = (uViewMatrix * vec4(uLampPositions[i], 1)).xyz;
+        }
+        vLampDirVS = normalize(uViewMatrix * vec4(0, -1, 0, 0)).xyz;
+
         // light direction in view space
         vec3 lightDirectionVS = normalize((uViewMatrix * vec4(uLightDirection,0.0))).xyz;
         
@@ -46,6 +59,7 @@ uniformShader = function (gl) {
         vViewVS = normalize(-vPosVS);
 
         gl_Position = uProjectionMatrix * uModelViewMatrix * vec4(aPosition, 1.0);
+        vTexCoords = aTexCoords; 
       }                                              
     `;
   
@@ -53,6 +67,8 @@ uniformShader = function (gl) {
     #extension GL_OES_standard_derivatives : enable
       precision highp float;                         
       uniform vec3 uColor;
+      uniform sampler2D uSampler;
+      uniform int uTextMode;
       
       uniform vec3 uLightDirection;
       varying vec3 vShadedColor;
@@ -60,17 +76,44 @@ uniformShader = function (gl) {
       varying vec3 vPosVS;
       varying vec3 vLVS;
       varying vec3 vViewVS;
+      varying vec3 vLPVS[12];
+      varying vec3 vLampDirVS;
+
+      varying vec2 vTexCoords; 
+
+      const float kamb = 0.0;
   
       void main(void)                                
       { 
-          vec3 N = normalize(cross(dFdx(vPosVS),dFdy(vPosVS)));
-          //compente diffusa
-          float L_diffuse = max(dot(vLVS,N),0.0);
-          //componente speculare
-          vec3 R = -vLVS+2.0 * dot(vLVS,N)*N;
-          vec3 k_spec = uColor+vec3(0.0,0.0,uColor.z*1.3);
-          float specular = max(0.0,pow(dot(vViewVS,R),5.0));
-          gl_FragColor = vec4(uColor* L_diffuse+k_spec*specular,1.0);	
+        vec3 currColor;
+        if(uTextMode == 0)
+          currColor = uColor;
+        else currColor = texture2D(uSampler,vTexCoords).xyz;
+
+        vec3 ambient = currColor * kamb;
+
+        vec3 N = normalize(cross(dFdx(vPosVS),dFdy(vPosVS)));
+        // diffusive
+        float L_diffuse = max(dot(vLVS,N),0.0);
+        // specular
+        vec3 R = -vLVS+2.0 * dot(vLVS,N)*N;
+        vec3 k_spec = currColor+vec3(0.0,0.0,currColor.z*1.3);
+        float specular = max(0.0,pow(dot(vViewVS,R),5.0));
+
+        for (int i = 0; i < 12; i++) {
+          /*
+          vec3 dir = normalize(vLPVS[i] - vPosVS.xyz);
+  
+          float spotcos = max(0., dot(vLampDirVS, -dir));
+          float spotAngle = acos(spotcos);
+
+          L_diffuse += max(0.0, dot(dir, N));
+          specular += pow(max(0., dot(vViewVS, reflect(-dir, N))), 5.0);
+          */
+        }
+        
+        gl_FragColor = vec4(currColor*L_diffuse,1.0);
+        //gl_FragColor = vec4(ambient + currColor*L_diffuse + k_spec*specular,1.0);        
       }                                             
     `;
   
@@ -87,11 +130,13 @@ uniformShader = function (gl) {
     // Create the shader program
     var aPositionIndex = 0;
     var aNormalIndex = 1;
+    var aTexCoordsIndex = 2;
     var shaderProgram = gl.createProgram();
     gl.attachShader(shaderProgram, vertexShader);
     gl.attachShader(shaderProgram, fragmentShader);
     gl.bindAttribLocation(shaderProgram, aPositionIndex, "aPosition");
     gl.bindAttribLocation(shaderProgram, aNormalIndex, "aNormal");
+    gl.bindAttribLocation(shaderProgram, aTexCoordsIndex, "aTexCoords");
     gl.linkProgram(shaderProgram);
   
     // If creating the shader program failed, alert
@@ -105,12 +150,17 @@ uniformShader = function (gl) {
   
     shaderProgram.aPositionIndex = aPositionIndex;
     shaderProgram.aNormalIndex = aNormalIndex;
+    shaderProgram.aTexCoordsIndex = aTexCoordsIndex;
   
     shaderProgram.uModelViewLocation  = gl.getUniformLocation(shaderProgram, "uModelViewMatrix");
+    shaderProgram.uModelLocation  = gl.getUniformLocation(shaderProgram, "uModelMatrix");
     shaderProgram.uViewMatrixLocation = gl.getUniformLocation(shaderProgram, "uViewMatrix");
     shaderProgram.uProjectionMatrixLocation = gl.getUniformLocation(shaderProgram, "uProjectionMatrix");
     shaderProgram.uColorLocation = gl.getUniformLocation(shaderProgram, "uColor");
+    shaderProgram.uSamplerLocation = gl.getUniformLocation(shaderProgram, "uSampler");
     shaderProgram.uLightDirectionLocation  = gl.getUniformLocation(shaderProgram, "uLightDirection");
+    shaderProgram.uLampPositionsLocation = gl.getUniformLocation(shaderProgram, "uLampPositions");
+    shaderProgram.uTextModeLocation = gl.getUniformLocation(shaderProgram, "uTextMode");
   
     shaderProgram.vertex_shader = vertexShaderSource;
     shaderProgram.fragment_shader = fragmentShaderSource;

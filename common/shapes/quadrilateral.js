@@ -1,10 +1,17 @@
-function Quadrilateral(quad,scale) {
-
+function QuadGround(quad,scale) {
+	if(typeof scale === 'undefined') scale = 1;
 	var nv = 4;
 	this.vertices = new Float32Array(nv  * 3);
 	for(var i = 0; i < nv*3;++i)
 		this.vertices[i] = quad[i];
-	
+		
+	this.texCoords = new Float32Array([
+    0.0,0.0,
+    scale,0.0,
+    scale,scale,
+    0.0,scale
+	  ]);	
+	  
 	this.triangleIndices = new Uint16Array(2*3);
 
  
