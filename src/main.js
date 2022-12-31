@@ -17,7 +17,7 @@ FollowFromUpCamera = function(){
       let target = glMatrix.vec3.create();
       let up = glMatrix.vec4.create();
       
-      glMatrix.vec3.transformMat4(eye, [0,50,0], this.frame);
+      glMatrix.vec3.transformMat4(eye, [0,100,0], this.frame);
       glMatrix.vec3.transformMat4(target, [0.0,0,0.0,1.0], this.frame);
       glMatrix.vec4.transformMat4(up, [0.0,0.0,-1,0.0], this.frame);
       
@@ -50,44 +50,67 @@ ChaseCamera = function(){
 }
 
 UserCamera = function(){
-
-  let moveeye = glMatrix.vec3.fromValues(30,10,0);
-  let movetarget = glMatrix.vec3.fromValues(0,0,0);
-  let moveup = glMatrix.vec3.fromValues(0,0,0);
   
-  mouseX = 0;
-  mouseY = 0;
+  let translation = glMatrix.vec3.create();
+  let rotationY = 0.0;
+  let rotationX = 0.0;
+
+  let mouseX = 0.0;
+  let mouseY = 0.0;
+  let mouseDown = false;
+
+  let rotate_camera = glMatrix.mat4.create();
   
   /* update the camera */
   this.update = function(car_position){
-    if(Renderer.car.control_keys["ArrowUp"])
-    glMatrix.vec3.add(moveeye, moveeye, [0,-1,0]);
-    if(Renderer.car.control_keys["ArrowDown"])
-    glMatrix.vec3.add(moveeye, moveeye, [0,1,0]);
-    if(Renderer.car.control_keys["ArrowLeft"])
-    glMatrix.vec3.add(moveeye, moveeye, [1,0,0]);
-    if(Renderer.car.control_keys["ArrowRight"])
-    glMatrix.vec3.add(moveeye, moveeye, [-1,0,0]);
-    if(Renderer.car.control_keys["r"])
-    glMatrix.vec3.add(moveeye, moveeye, [0,-1,0]);
-    if(Renderer.car.control_keys["f"])
-    glMatrix.vec3.add(moveeye, moveeye, [0,1,0]);    
-  }
+    let x_axis = glMatrix.vec4.fromValues(1,0,0,0);
+    let y_axis = glMatrix.vec4.fromValues(0,1,0,0);
+    let z_axis = glMatrix.vec4.fromValues(0,0,1,0);
 
+    glMatrix.mat4.multiply(x_axis, rotate_camera, x_axis);
+    glMatrix.vec3.normalize(x_axis, x_axis);
+
+    glMatrix.mat4.multiply(y_axis, rotate_camera, y_axis);
+    glMatrix.vec3.normalize(y_axis, y_axis);
+
+    glMatrix.mat4.multiply(z_axis, rotate_camera, z_axis);
+    glMatrix.vec3.normalize(z_axis, z_axis);
+
+    if(Renderer.car.control_keys["ArrowUp"])
+      glMatrix.vec3.subtract(translation, translation, z_axis.slice(0,3));
+    if(Renderer.car.control_keys["ArrowDown"])
+      glMatrix.vec3.add(translation, translation, z_axis.slice(0,3));
+    if(Renderer.car.control_keys["ArrowLeft"])
+      glMatrix.vec3.subtract(translation, translation, x_axis.slice(0,3));
+    if(Renderer.car.control_keys["ArrowRight"])
+      glMatrix.vec3.add(translation, translation, x_axis.slice(0,3));  
+
+    if(this.mouseDown == true) {
+      rotationY -= (this.mouseX - 300) * 0.0001;
+      rotationX -= (this.mouseY - 300) * 0.0001;
+    }
+  }
+  
   /* return the transformation matrix to transform from worlod coordiantes to the view reference frame */
-  this.matrix = function(){
-    this.frame = glMatrix.mat4.create();
-  // point of view
-  let eye = glMatrix.vec3.create();
-  // where to look
-  let target = glMatrix.vec3.create();
-  glMatrix.vec3.add(target, target, movetarget);
-  // camera orientation
-  let up = glMatrix.vec4.create();
-  glMatrix.vec3.transformMat4(eye, moveeye, this.frame);
-  glMatrix.vec3.transformMat4(target, [1.0,0.0,0.0,1.0], this.frame);
-  glMatrix.vec4.transformMat4(up, [0.0,1.0,0.0,0.0], glMatrix.mat4.create());
-    return glMatrix.mat4.lookAt(glMatrix.mat4.create(),eye,target,up.slice(0,3));	
+  this.matrix = function() {
+    let translate_camera = glMatrix.mat4.create();
+    let move_camera = glMatrix.mat4.create();
+
+    glMatrix.mat4.fromTranslation(translate_camera, translation);
+    
+    let x_rotate = glMatrix.mat4.create();
+    glMatrix.mat4.fromRotation(x_rotate, rotationX, [1,0,0]);
+
+    let y_rotate = glMatrix.mat4.create();
+    glMatrix.mat4.fromRotation(y_rotate, rotationY, [0,1,0]);
+
+    glMatrix.mat4.multiply(rotate_camera, y_rotate, x_rotate);
+    glMatrix.mat4.multiply(move_camera, translate_camera, rotate_camera);
+
+    let inverted = glMatrix.mat4.create();
+    glMatrix.mat4.invert(inverted, move_camera);
+
+    return inverted;	
   }
 }
 
@@ -444,6 +467,8 @@ Renderer.drawScene = function (gl) {
   let lamp_mat = glMatrix.mat4.create();
   let light_mat = glMatrix.mat4.create();
    
+  let lamps = [];
+
   for (var i = 0; i < Game.scene.lamps.length; ++i) {
     glMatrix.mat4.identity(lamp_mat);
     Renderer.stack.push();
@@ -453,7 +478,7 @@ Renderer.drawScene = function (gl) {
     this.drawObject(gl, this.cylinder, [0.0, 0.0, 0.0]);
     Renderer.stack.pop();
     let lamp_pos = glMatrix.vec3.create();
-    glMatrix.vec3.add(lamp_pos, Game.scene.lamps[i].position, [0.0, 6.0, 0.0]);
+    glMatrix.vec3.add(lamp_pos, Game.scene.lamps[i].position, [0.0, 7.0, 0.0]);
     glMatrix.mat4.identity(light_mat);
     Renderer.stack.push();
     Renderer.stack.multiply(glMatrix.mat4.fromTranslation(light_mat, lamp_pos));
@@ -461,19 +486,19 @@ Renderer.drawScene = function (gl) {
     gl.uniformMatrix4fv(this.uniformShader.uModelViewLocation, false, this.stack.matrix);
     this.drawObject(gl, this.cube, [1, 1, 1]);
     Renderer.stack.pop();
-    gl.uniform3fv(this.uniformShader.uLampPositionsLocation, lamp_pos);
+    lamps.push(lamp_pos);
   }
 
-	gl.useProgram(null);
+  for (var i = 0; i < 12; ++i) {
+    gl.uniform3fv(this.uniformShader.uLampPositionsLocation[i], lamps[i]);
+  }
+  	gl.useProgram(null);
 };
-
-
 
 Renderer.Display = function () {
   Renderer.drawScene(Renderer.gl);
   window.requestAnimationFrame(Renderer.Display) ;
 };
-
 
 Renderer.setupAndStart = function () {
  /* create the canvas */
@@ -504,7 +529,7 @@ Renderer.setupAndStart = function () {
   */
   Renderer.canvas.addEventListener('mousemove',on_mouseMove,false);
   Renderer.canvas.addEventListener('mouseup', on_mouseup,false);
-  Renderer.canvas.addEventListener('mousedown', on_mouseup,false);
+  Renderer.canvas.addEventListener('mousedown', on_mousedown,false);
   Renderer.canvas.addEventListener('keydown',on_keydown,false);
   Renderer.canvas.addEventListener('keyup',on_keyup,false);
 
@@ -512,10 +537,10 @@ Renderer.setupAndStart = function () {
 }
 
 on_mouseup = function(e) {
-
+  Renderer.cameras[2].mouseDown = false;
 }
 on_mousedown = function(e) {
-
+  Renderer.cameras[2].mouseDown = true;
 }
 on_mouseMove = function(e){
   Renderer.cameras[2].mouseX = e.clientX;

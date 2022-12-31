@@ -81,7 +81,7 @@ uniformShader = function (gl) {
 
       varying vec2 vTexCoords; 
 
-      const float kamb = 0.0;
+      const float kamb = 0.1;
   
       void main(void)                                
       { 
@@ -95,25 +95,26 @@ uniformShader = function (gl) {
         vec3 N = normalize(cross(dFdx(vPosVS),dFdy(vPosVS)));
         // diffusive
         float L_diffuse = max(dot(vLVS,N),0.0);
+        //float L_diffuse = 0.0;
         // specular
         vec3 R = -vLVS+2.0 * dot(vLVS,N)*N;
         vec3 k_spec = currColor+vec3(0.0,0.0,currColor.z*1.3);
         float specular = max(0.0,pow(dot(vViewVS,R),5.0));
 
         for (int i = 0; i < 12; i++) {
-          /*
-          vec3 dir = normalize(vLPVS[i] - vPosVS.xyz);
-  
-          float spotcos = max(0., dot(vLampDirVS, -dir));
-          float spotAngle = acos(spotcos);
+        
+          vec3 offset = vLPVS[i] - vPosVS;
+          vec3 toLight = normalize(offset);
 
-          L_diffuse += max(0.0, dot(dir, N));
-          specular += pow(max(0., dot(vViewVS, reflect(-dir, N))), 5.0);
-          */
+          float SL_diffuse = max(0.0, dot(toLight, N));
+          float angleSur = dot(vLampDirVS, -toLight);
+          float spot = smoothstep(0.9, 1.0, angleSur * 1.2);
+          if ( angleSur > 0.0) L_diffuse += (SL_diffuse * spot);
+        
         }
         
-        gl_FragColor = vec4(currColor*L_diffuse,1.0);
-        //gl_FragColor = vec4(ambient + currColor*L_diffuse + k_spec*specular,1.0);        
+        //gl_FragColor = vec4(currColor*L_diffuse,1.0);
+        gl_FragColor = vec4(ambient + currColor*L_diffuse + k_spec*specular,1.0);        
       }                                             
     `;
   
@@ -159,7 +160,10 @@ uniformShader = function (gl) {
     shaderProgram.uColorLocation = gl.getUniformLocation(shaderProgram, "uColor");
     shaderProgram.uSamplerLocation = gl.getUniformLocation(shaderProgram, "uSampler");
     shaderProgram.uLightDirectionLocation  = gl.getUniformLocation(shaderProgram, "uLightDirection");
-    shaderProgram.uLampPositionsLocation = gl.getUniformLocation(shaderProgram, "uLampPositions");
+    shaderProgram.uLampPositionsLocation = [];
+    for (var i = 0; i < Game.scene.lamps.length; ++i) {
+      shaderProgram.uLampPositionsLocation[i] = gl.getUniformLocation(shaderProgram, "uLampPositions[",i,"]");
+    }
     shaderProgram.uTextModeLocation = gl.getUniformLocation(shaderProgram, "uTextMode");
   
     shaderProgram.vertex_shader = vertexShaderSource;
