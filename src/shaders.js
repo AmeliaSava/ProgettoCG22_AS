@@ -1,10 +1,13 @@
 uniformShader = function (gl) {
     var vertexShaderSource = `
-      uniform   mat4 uProjectionMatrix;
-      uniform   mat4 uViewMatrix; 
-      // transformation from object space to view space              
-      uniform   mat4 uModelViewMatrix;
+      uniform mat4 uProjectionMatrix;
+      uniform mat4 uViewMatrix; 
       uniform mat4 uModelMatrix;
+
+      //headlights
+      uniform mat4 uHeadLightLeftView;
+      uniform mat4 uHeadLightRightView;
+      uniform mat4 uHeadLightProjection;
   
       // light direction
       uniform vec3 uLightDirection;
@@ -30,6 +33,8 @@ uniformShader = function (gl) {
       varying vec3 vViewVS;
 
       varying vec2 vTexCoords; 
+      varying vec4 vHLLposProjVS;
+      varying vec4 vHLRposProjVS;
   
       void main(void)                                
       {    
@@ -42,7 +47,7 @@ uniformShader = function (gl) {
         vec3 lightDirectionVS = normalize((uViewMatrix * vec4(uLightDirection,0.0))).xyz;
         
         // normal in view space per vertex
-        vec3 normalVS = normalize(uModelViewMatrix * vec4(aNormal,0.0)).xyz;
+        vec3 normalVS = normalize(uViewMatrix * uModelMatrix  * vec4(aNormal,0.0)).xyz;
   
         // cosine term for diffuse component, if negative ignore
         float L_diffuse = max(dot(lightDirectionVS,normalVS),0.0);
@@ -51,14 +56,18 @@ uniformShader = function (gl) {
         vShadedColor = uColor*L_diffuse;  
         
         // vertex view space position
-        vPosVS = (uModelViewMatrix*	vec4(aPosition, 1.0)).xyz;
+        vPosVS = (uViewMatrix * uModelMatrix *	vec4(aPosition, 1.0)).xyz;
 
         // passing values to the shaders
         vLVS = lightDirectionVS;
         // view direction in view space
         vViewVS = normalize(-vPosVS);
 
-        gl_Position = uProjectionMatrix * uModelViewMatrix * vec4(aPosition, 1.0);
+        //headlights
+        vHLLposProjVS = uHeadLightProjection*uHeadLightLeftView*uModelMatrix*vec4(aPosition, 1.0);
+        vHLRposProjVS = uHeadLightProjection*uHeadLightRightView*uModelMatrix*vec4(aPosition, 1.0);
+        //gl_Position = vHLLposProjVS;
+        gl_Position = uProjectionMatrix * uViewMatrix * uModelMatrix * vec4(aPosition, 1.0);
         vTexCoords = aTexCoords; 
       }                                              
     `;
@@ -68,6 +77,7 @@ uniformShader = function (gl) {
       precision highp float;                         
       uniform vec3 uColor;
       uniform sampler2D uSampler;
+      uniform sampler2D uSamplerHL;
       uniform int uTextMode;
       
       uniform vec3 uLightDirection;
@@ -80,6 +90,8 @@ uniformShader = function (gl) {
       varying vec3 vLampDirVS;
 
       varying vec2 vTexCoords; 
+      varying vec4 vHLLposProjVS;
+      varying vec4 vHLRposProjVS;
 
       const float kamb = 0.1;
   
@@ -113,6 +125,16 @@ uniformShader = function (gl) {
         
         }
         
+        vec4 HLLTexCoords = (vHLLposProjVS/vHLLposProjVS.w) * 0.5 + 0.5;
+        vec4 HLRTexCoords = (vHLRposProjVS/vHLRposProjVS.w) * 0.5 + 0.5;
+
+        vec3 HLLColor = texture2D(uSamplerHL, HLLTexCoords.xy).xyz;
+        vec3 HLRColor = texture2D(uSamplerHL, HLRTexCoords.xy).xyz;
+
+        if(HLLTexCoords.x <= 1.0 && HLLTexCoords.y <= 1.0 && HLLTexCoords.z <= 1.0 && HLLTexCoords.x >= 0.0 && HLLTexCoords.y >= 0.0 && HLLTexCoords.z >= 0.0)
+          currColor += HLLColor * 0.5;
+        if(HLRTexCoords.x <= 1.0 && HLRTexCoords.y <= 1.0 && HLRTexCoords.z <= 1.0 && HLRTexCoords.x >= 0.0 && HLRTexCoords.y >= 0.0 && HLRTexCoords.z >= 0.0)
+          currColor += HLRColor * 0.5;
         //gl_FragColor = vec4(currColor*L_diffuse,1.0);
         gl_FragColor = vec4(ambient + currColor*L_diffuse + k_spec*specular,1.0);        
       }                                             
@@ -153,18 +175,18 @@ uniformShader = function (gl) {
     shaderProgram.aNormalIndex = aNormalIndex;
     shaderProgram.aTexCoordsIndex = aTexCoordsIndex;
   
-    shaderProgram.uModelViewLocation  = gl.getUniformLocation(shaderProgram, "uModelViewMatrix");
     shaderProgram.uModelLocation  = gl.getUniformLocation(shaderProgram, "uModelMatrix");
     shaderProgram.uViewMatrixLocation = gl.getUniformLocation(shaderProgram, "uViewMatrix");
     shaderProgram.uProjectionMatrixLocation = gl.getUniformLocation(shaderProgram, "uProjectionMatrix");
     shaderProgram.uColorLocation = gl.getUniformLocation(shaderProgram, "uColor");
     shaderProgram.uSamplerLocation = gl.getUniformLocation(shaderProgram, "uSampler");
+    shaderProgram.uSamplerHLLocation = gl.getUniformLocation(shaderProgram, "uSamplerHL");
     shaderProgram.uLightDirectionLocation  = gl.getUniformLocation(shaderProgram, "uLightDirection");
-    shaderProgram.uLampPositionsLocation = [];
-    for (var i = 0; i < Game.scene.lamps.length; ++i) {
-      shaderProgram.uLampPositionsLocation[i] = gl.getUniformLocation(shaderProgram, "uLampPositions[",i,"]");
-    }
+    shaderProgram.uLampPositionsLocation = gl.getUniformLocation(shaderProgram, "uLampPositions");
     shaderProgram.uTextModeLocation = gl.getUniformLocation(shaderProgram, "uTextMode");
+    shaderProgram.uHeadLightLeftViewLocation  = gl.getUniformLocation(shaderProgram, "uHeadLightLeftView");
+    shaderProgram.uHeadLightRightViewLocation = gl.getUniformLocation(shaderProgram, "uHeadLightRightView");
+    shaderProgram.uHeadLightProjectionLocation = gl.getUniformLocation(shaderProgram, "uHeadLightProjection");
   
     shaderProgram.vertex_shader = vertexShaderSource;
     shaderProgram.fragment_shader = fragmentShaderSource;

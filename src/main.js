@@ -17,7 +17,7 @@ FollowFromUpCamera = function(){
       let target = glMatrix.vec3.create();
       let up = glMatrix.vec4.create();
       
-      glMatrix.vec3.transformMat4(eye, [0,100,0], this.frame);
+      glMatrix.vec3.transformMat4(eye, [0,50,0], this.frame);
       glMatrix.vec3.transformMat4(target, [0.0,0,0.0,1.0], this.frame);
       glMatrix.vec4.transformMat4(up, [0.0,0.0,-1,0.0], this.frame);
       
@@ -294,20 +294,20 @@ Renderer.drawCar = function (gl) {
   // drawing the body of the car
   cube_mat = glMatrix.mat4.create();
   
-  glMatrix.mat4.fromTranslation(translate_matrix, [0,3,-0.3]);
+  glMatrix.mat4.fromTranslation(translate_matrix, [0,2,0]);
   glMatrix.mat4.fromScaling(scale_matrix, [1,1,2]);
   glMatrix.mat4.mul(cube_mat, translate_matrix, scale_matrix);
   
   Renderer.stack.push();
   Renderer.stack.multiply(cube_mat);
-  gl.uniformMatrix4fv(this.uniformShader.uModelViewLocation, false, this.stack.matrix);
+  gl.uniformMatrix4fv(this.uniformShader.uModelLocation, false, this.stack.matrix);
   this.drawObject(gl, this.cube, [0.9, 0, 0.1]);
   Renderer.stack.pop();
 
   pipe_mat = glMatrix.mat4.create();
   
   glMatrix.mat4.fromRotation(rotate_matrix,0.4,[0,1,0]);
-  glMatrix.mat4.fromTranslation(translate_matrix, [0.7,4,6]);
+  glMatrix.mat4.fromTranslation(translate_matrix, [0.7,2.5,6]);
   glMatrix.mat4.fromScaling(scale_matrix, [0.2,1,0.2]);
   glMatrix.mat4.mul(pipe_mat, rotate_matrix, translate_matrix);
   glMatrix.mat4.mul(pipe_mat, scale_matrix, pipe_mat);
@@ -319,14 +319,14 @@ Renderer.drawCar = function (gl) {
   
   Renderer.stack.push();
   Renderer.stack.multiply(cube_mat);
-  gl.uniformMatrix4fv(this.uniformShader.uModelViewLocation, false, this.stack.matrix);
+  gl.uniformMatrix4fv(this.uniformShader.uModelLocation, false, this.stack.matrix);
   this.drawObject(gl, this.cylinder, [0,0.2,0.5]);
   Renderer.stack.pop();
 
   cabin_mat = glMatrix.mat4.create();
   
   glMatrix.mat4.fromRotation(rotate_matrix,0.1,[1,0,0]);
-  glMatrix.mat4.fromTranslation(translate_matrix, [1.4,5.7,3]);
+  glMatrix.mat4.fromTranslation(translate_matrix, [1.4,4.7,4]);
   glMatrix.mat4.fromScaling(scale_matrix, [0.7,0.7,0.7]);
   glMatrix.mat4.mul(cabin_mat, rotate_matrix, translate_matrix);
   glMatrix.mat4.mul(cabin_mat, scale_matrix, cabin_mat);
@@ -338,7 +338,7 @@ Renderer.drawCar = function (gl) {
   
   Renderer.stack.push();
   Renderer.stack.multiply(cube_mat);
-  gl.uniformMatrix4fv(this.uniformShader.uModelViewLocation, false, this.stack.matrix);
+  gl.uniformMatrix4fv(this.uniformShader.uModelLocation, false, this.stack.matrix);
   this.drawObject(gl, this.cube, [0.2,0.9,1]);
   Renderer.stack.pop();
 
@@ -364,21 +364,21 @@ Renderer.drawCar = function (gl) {
   glMatrix.mat4.mul(wheel_mat, rotate_matrix, wheel_mat);
 
   // attach wheels to the car
-  glMatrix.mat4.fromTranslation(translate_matrix,[-0.8,1.6,-2.1]);
+  glMatrix.mat4.fromTranslation(translate_matrix,[-0.8,0.9,-2.1]);
   glMatrix.mat4.mul(cube_mat,translate_matrix,wheel_mat);
   
   Renderer.stack.push();
   Renderer.stack.multiply(cube_mat);
-  gl.uniformMatrix4fv(this.uniformShader.uModelViewLocation, false, this.stack.matrix);
+  gl.uniformMatrix4fv(this.uniformShader.uModelLocation, false, this.stack.matrix);
   this.drawObject(gl, this.cylinder, [0.1, 0, 0]);
   Renderer.stack.pop();
 
-  glMatrix.mat4.fromTranslation(translate_matrix,[2.8,1.6,-2.1]);
+  glMatrix.mat4.fromTranslation(translate_matrix,[2.8,0.9,-2.1]);
   glMatrix.mat4.mul(cube_mat,translate_matrix,wheel_mat);
 
   Renderer.stack.push();
   Renderer.stack.multiply(cube_mat);
-  gl.uniformMatrix4fv(this.uniformShader.uModelViewLocation, false, this.stack.matrix);
+  gl.uniformMatrix4fv(this.uniformShader.uModelLocation, false, this.stack.matrix);
   this.drawObject(gl, this.cylinder, [0.1, 0, 0]);
   Renderer.stack.pop(); 
 
@@ -392,7 +392,7 @@ Renderer.drawCar = function (gl) {
   
   Renderer.stack.push();
   Renderer.stack.multiply(cube_mat);
-  gl.uniformMatrix4fv(this.uniformShader.uModelViewLocation, false, this.stack.matrix);
+  gl.uniformMatrix4fv(this.uniformShader.uModelLocation, false, this.stack.matrix);
   this.drawObject(gl, this.cylinder, [0.1, 0, 0]);
   Renderer.stack.pop();
 
@@ -401,9 +401,10 @@ Renderer.drawCar = function (gl) {
 
   Renderer.stack.push();
   Renderer.stack.multiply(cube_mat);
-  gl.uniformMatrix4fv(this.uniformShader.uModelViewLocation, false, this.stack.matrix);
+  gl.uniformMatrix4fv(this.uniformShader.uModelLocation, false, this.stack.matrix);
   this.drawObject(gl, this.cylinder, [0.1, 0, 0]);
   Renderer.stack.pop();
+
 };
 
 
@@ -432,18 +433,13 @@ Renderer.drawScene = function (gl) {
   
   // initialize the stack with the identity
   this.stack.loadIdentity();
-  // multiply by the view matrix
-  this.stack.multiply(invV);
 
-  // drawing the car
   this.stack.push();
-  // projection * viewport
   this.stack.multiply(this.car.frame);
   this.drawCar(gl);
   this.stack.pop();
-  
-  gl.uniformMatrix4fv(this.uniformShader.uModelLocation, false, this.car.frame);
-  gl.uniformMatrix4fv(this.uniformShader.uModelViewLocation, false, this.stack.matrix);
+
+  gl.uniformMatrix4fv(this.uniformShader.uModelLocation, false, this.stack.matrix);
   gl.uniformMatrix4fv(this.uniformShader.uViewMatrixLocation, false, invV);
 
   // drawing the static elements (ground, track and buldings)
@@ -474,8 +470,8 @@ Renderer.drawScene = function (gl) {
     Renderer.stack.push();
     Renderer.stack.multiply(glMatrix.mat4.fromTranslation(lamp_mat,Game.scene.lamps[i].position));
     Renderer.stack.multiply(glMatrix.mat4.fromScaling(lamp_mat, [0.2, 4, 0.2]));
-    gl.uniformMatrix4fv(this.uniformShader.uModelViewLocation, false, this.stack.matrix);
-    this.drawObject(gl, this.cylinder, [0.0, 0.0, 0.0]);
+    gl.uniformMatrix4fv(this.uniformShader.uModelLocation, false, this.stack.matrix);
+    this.drawObject(gl, this.cylinder, [0.1, 0.1, 0.1]);
     Renderer.stack.pop();
     let lamp_pos = glMatrix.vec3.create();
     glMatrix.vec3.add(lamp_pos, Game.scene.lamps[i].position, [0.0, 7.0, 0.0]);
@@ -483,16 +479,45 @@ Renderer.drawScene = function (gl) {
     Renderer.stack.push();
     Renderer.stack.multiply(glMatrix.mat4.fromTranslation(light_mat, lamp_pos));
     Renderer.stack.multiply(glMatrix.mat4.fromScaling(light_mat, [0.5, 0.5, 0.5]));
-    gl.uniformMatrix4fv(this.uniformShader.uModelViewLocation, false, this.stack.matrix);
+    gl.uniformMatrix4fv(this.uniformShader.uModelLocation, false, this.stack.matrix);
     this.drawObject(gl, this.cube, [1, 1, 1]);
     Renderer.stack.pop();
-    lamps.push(lamp_pos);
+    for(var j = 0; j < 3; ++j)
+     lamps.splice((i*3)+j, 0, lamp_pos[j]);
   }
 
   for (var i = 0; i < 12; ++i) {
-    gl.uniform3fv(this.uniformShader.uLampPositionsLocation[i], lamps[i]);
+    gl.uniform3fv(this.uniformShader.uLampPositionsLocation, lamps);
   }
-  	gl.useProgram(null);
+
+  //headlights
+
+  // position of the headlights
+  gl.uniform1i(this.uniformShader.uSamplerHLLocation,6);
+  let hl_left_eye = glMatrix.vec4.create();
+  let hl_right_eye = glMatrix.vec4.create();
+  //glMatrix.vec4.transformMat4(hl_left_eye, [-0.2,2,-2,1], Renderer.car.frame);
+  //glMatrix.vec4.transformMat4(hl_right_eye, [0.2,2,-2,1], Renderer.car.frame);
+  glMatrix.mat4.multiply(hl_left_eye, Renderer.car.frame, [0,2,-1.1,1]);
+  glMatrix.mat4.multiply(hl_right_eye, Renderer.car.frame, [0,2,-1.1,1]);
+  // direction of the headlights
+  let hl_left_target = glMatrix.vec4.create();
+  let hl_right_target = glMatrix.vec4.create();
+  //glMatrix.vec4.transformMat4(hl_left_target, [-0.2,2,-4,1], Renderer.car.frame);
+  //glMatrix.vec4.transformMat4(hl_right_target, [0.2,2,-4,1], Renderer.car.frame);
+  glMatrix.mat4.multiply(hl_left_target, Renderer.car.frame, [-0.2,2,-3,1]);
+  glMatrix.mat4.multiply(hl_right_target, Renderer.car.frame, [0.2,2,-3,1]);
+
+  let hl_left = glMatrix.mat4.lookAt(glMatrix.mat4.create(), hl_left_eye, hl_left_target, [0,1,0]);
+  let hl_right = glMatrix.mat4.lookAt(glMatrix.mat4.create(), hl_right_eye, hl_right_target, [0,1,0]);
+
+  let hl_projection = glMatrix.mat4.perspective(glMatrix.mat4.create(), Math.PI / 5, 0.9, 1, 70);
+
+  gl.uniformMatrix4fv(this.uniformShader.uHeadLightLeftViewLocation, false, hl_left);
+  gl.uniformMatrix4fv(this.uniformShader.uHeadLightRightViewLocation, false, hl_right);
+  gl.uniformMatrix4fv(this.uniformShader.uHeadLightProjectionLocation, false, hl_projection);
+  
+  gl.useProgram(null);
 };
 
 Renderer.Display = function () {
