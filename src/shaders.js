@@ -112,7 +112,7 @@ uniformShader = function (gl) {
         vec3 R = -vLVS+2.0 * dot(vLVS,N)*N;
         vec3 k_spec = currColor+vec3(0.0,0.0,currColor.z*1.3);
         float specular = max(0.0,pow(dot(vViewVS,R),5.0));
-
+        /*
         for (int i = 0; i < 12; i++) {
         
           vec3 offset = vLPVS[i] - vPosVS;
@@ -124,7 +124,7 @@ uniformShader = function (gl) {
           if ( angleSur > 0.0) L_diffuse += (SL_diffuse * spot);
         
         }
-        
+        */
         vec4 HLLTexCoords = (vHLLposProjVS/vHLLposProjVS.w) * 0.5 + 0.5;
         vec4 HLRTexCoords = (vHLRposProjVS/vHLRposProjVS.w) * 0.5 + 0.5;
 
@@ -132,9 +132,11 @@ uniformShader = function (gl) {
         vec3 HLRColor = texture2D(uSamplerHL, HLRTexCoords.xy).xyz;
 
         if(HLLTexCoords.x <= 1.0 && HLLTexCoords.y <= 1.0 && HLLTexCoords.z <= 1.0 && HLLTexCoords.x >= 0.0 && HLLTexCoords.y >= 0.0 && HLLTexCoords.z >= 0.0)
-          currColor += HLLColor * 0.5;
+          currColor += HLLColor * 0.4;
+          
         if(HLRTexCoords.x <= 1.0 && HLRTexCoords.y <= 1.0 && HLRTexCoords.z <= 1.0 && HLRTexCoords.x >= 0.0 && HLRTexCoords.y >= 0.0 && HLRTexCoords.z >= 0.0)
-          currColor += HLRColor * 0.5;
+          currColor += HLRColor * 0.4;
+
         //gl_FragColor = vec4(currColor*L_diffuse,1.0);
         gl_FragColor = vec4(ambient + currColor*L_diffuse + k_spec*specular,1.0);        
       }                                             

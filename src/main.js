@@ -496,22 +496,18 @@ Renderer.drawScene = function (gl) {
   gl.uniform1i(this.uniformShader.uSamplerHLLocation,6);
   let hl_left_eye = glMatrix.vec4.create();
   let hl_right_eye = glMatrix.vec4.create();
-  //glMatrix.vec4.transformMat4(hl_left_eye, [-0.2,2,-2,1], Renderer.car.frame);
-  //glMatrix.vec4.transformMat4(hl_right_eye, [0.2,2,-2,1], Renderer.car.frame);
-  glMatrix.mat4.multiply(hl_left_eye, Renderer.car.frame, [0,2,-1.1,1]);
-  glMatrix.mat4.multiply(hl_right_eye, Renderer.car.frame, [0,2,-1.1,1]);
+  glMatrix.mat4.multiply(hl_left_eye, Renderer.car.frame, [-0.2,2,2.8,1]);
+  glMatrix.mat4.multiply(hl_right_eye, Renderer.car.frame, [0.2,2,2.8,1]);
   // direction of the headlights
   let hl_left_target = glMatrix.vec4.create();
   let hl_right_target = glMatrix.vec4.create();
-  //glMatrix.vec4.transformMat4(hl_left_target, [-0.2,2,-4,1], Renderer.car.frame);
-  //glMatrix.vec4.transformMat4(hl_right_target, [0.2,2,-4,1], Renderer.car.frame);
-  glMatrix.mat4.multiply(hl_left_target, Renderer.car.frame, [-0.2,2,-3,1]);
-  glMatrix.mat4.multiply(hl_right_target, Renderer.car.frame, [0.2,2,-3,1]);
+  glMatrix.mat4.multiply(hl_left_target, Renderer.car.frame, [-0.8,2,-3,1]);
+  glMatrix.mat4.multiply(hl_right_target, Renderer.car.frame, [0.8,2,-3,1]);
 
   let hl_left = glMatrix.mat4.lookAt(glMatrix.mat4.create(), hl_left_eye, hl_left_target, [0,1,0]);
   let hl_right = glMatrix.mat4.lookAt(glMatrix.mat4.create(), hl_right_eye, hl_right_target, [0,1,0]);
 
-  let hl_projection = glMatrix.mat4.perspective(glMatrix.mat4.create(), Math.PI / 5, 0.9, 1, 70);
+  let hl_projection = glMatrix.mat4.perspective(glMatrix.mat4.create(), Math.PI/5, 1,6.2, 70);
 
   gl.uniformMatrix4fv(this.uniformShader.uHeadLightLeftViewLocation, false, hl_left);
   gl.uniformMatrix4fv(this.uniformShader.uHeadLightRightViewLocation, false, hl_right);
