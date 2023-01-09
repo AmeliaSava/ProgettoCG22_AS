@@ -126,9 +126,11 @@ Renderer.cameras.push(new UserCamera());
 // set the camera currently in use
 Renderer.currentCamera = 0;
 
-/*
-create the buffers for an object as specified in common/shapes/triangle.js
-*/
+Renderer.shadowMapSize = 2048;
+
+/**
+ * Create the buffers for an object as specified in common/shapes/triangle.js
+ */
 Renderer.createObjectBuffers = function (gl, obj) {
 
   obj.vertexBuffer = gl.createBuffer();
@@ -179,48 +181,139 @@ Renderer.createObjectBuffers = function (gl, obj) {
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
 };
 
-/*
-draw an object as specified in common/shapes/triangle.js for which the buffer 
-have alrady been created
-*/
-Renderer.drawObject = function (gl, obj, fillColor) {
+/**
+ * Creates the framebuffer for shadow mapping
+ */
+Renderer.createFramebuffer = function(gl, size) {
+  Renderer.gl.activeTexture(Renderer.gl.TEXTURE4);
+  var depthTexture = gl.createTexture();
+	const depthTextureSize = size;
+	gl.bindTexture(gl.TEXTURE_2D, depthTexture);
+	gl.texImage2D(
+	  gl.TEXTURE_2D,      // target
+		0,                  // mip level
+		gl.DEPTH_COMPONENT, // internal format
+		depthTextureSize,   // width
+		depthTextureSize,   // height
+		0,                  // border
+		gl.DEPTH_COMPONENT, // format
+		gl.UNSIGNED_INT,    // type
+		null);              // data
+		
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+ 
+	var depthFramebuffer = gl.createFramebuffer();
+	gl.bindFramebuffer(gl.FRAMEBUFFER, depthFramebuffer);
+	gl.framebufferTexture2D(
+			gl.FRAMEBUFFER,       // target
+			gl.DEPTH_ATTACHMENT,  // attachment point
+			gl.TEXTURE_2D,        // texture target
+			depthTexture,         // texture
+			0);                   // mip level
+    	
+  // create a color texture of the same size as the depth texture
+	var colorTexture = gl.createTexture();
+		gl.bindTexture(gl.TEXTURE_2D, colorTexture);
+		gl.texImage2D(
+			gl.TEXTURE_2D,
+			0,
+			gl.RGBA,
+			depthTextureSize,
+			depthTextureSize,
+			0,
+			gl.RGBA,
+			gl.UNSIGNED_BYTE,
+			null,
+	);
+
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+ 
+	// attach it to the framebuffer
+	gl.framebufferTexture2D(
+ 	   gl.FRAMEBUFFER,        // target
+ 	   gl.COLOR_ATTACHMENT0,  // attachment point
+ 	   gl.TEXTURE_2D,         // texture target
+ 	   colorTexture,         // texture
+ 	   0);                    // mip level
+    	
+  gl.bindTexture(gl.TEXTURE_2D,null);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  depthFramebuffer.depthTexture = depthTexture;
+  depthFramebuffer.colorTexture = colorTexture;
+  depthFramebuffer.size = depthTextureSize;
+    	
+  return depthFramebuffer;
+};
+
+/**
+ * draw an object as specified in common/shapes/triangle.js for which the buffer 
+ * have alrady been created
+ */
+Renderer.drawObject = function (gl, shader, shadow_pass, obj, fillColor) {
 
   gl.bindBuffer(gl.ARRAY_BUFFER, obj.vertexBuffer);
-  gl.enableVertexAttribArray(this.uniformShader.aPositionIndex);
-  gl.vertexAttribPointer(this.uniformShader.aPositionIndex, 3, gl.FLOAT, false, 0, 0);
+  gl.enableVertexAttribArray(shader.aPositionIndex);
+  gl.vertexAttribPointer(shader.aPositionIndex, 3, gl.FLOAT, false, 0, 0);
   
-  gl.bindBuffer(gl.ARRAY_BUFFER, obj.normalBuffer);
-  gl.enableVertexAttribArray(this.uniformShader.aNormalIndex);
-  gl.vertexAttribPointer(this.uniformShader.aNormalIndex, 3, gl.FLOAT, false, 0, 0);
+  if(!shadow_pass) {
+    gl.bindBuffer(gl.ARRAY_BUFFER, obj.normalBuffer);
+    gl.enableVertexAttribArray(shader.aNormalIndex);
+    gl.vertexAttribPointer(shader.aNormalIndex, 3, gl.FLOAT, false, 0, 0);
 
-  if(typeof obj.texCoords != 'undefined'){
-    gl.uniform1i(this.uniformShader.uTextModeLocation, 1);
-    gl.bindBuffer(gl.ARRAY_BUFFER, obj.texCoordsBuffer);	
-    gl.enableVertexAttribArray(this.uniformShader.aTexCoordsIndex);
-    gl.vertexAttribPointer(this.uniformShader.aTexCoordsIndex, 2, gl.FLOAT, false, 0, 0);
-  } else {
-        gl.uniform1i(this.uniformShader.uTextModeLocation, 0);
-        gl.disableVertexAttribArray(this.uniformShader.aTexCoordsIndex);
+    if(typeof obj.texCoords != 'undefined'){
+      gl.uniform1i(shader.uTextModeLocation, 1);
+      gl.bindBuffer(gl.ARRAY_BUFFER, obj.texCoordsBuffer);	
+      gl.enableVertexAttribArray(shader.aTexCoordsIndex);
+      gl.vertexAttribPointer(shader.aTexCoordsIndex, 2, gl.FLOAT, false, 0, 0);
+    } else {
+      gl.uniform1i(shader.uTextModeLocation, 0);
+          gl.disableVertexAttribArray(shader.aTexCoordsIndex);
+    }
   }
-
+  /* TODO
   if( typeof obj.tangentsBuffer != 'undefined'){ 
     gl.bindBuffer(gl.ARRAY_BUFFER, obj.tangentsBuffer);
-    gl.enableVertexAttribArray(this.uniformShader.aTangentsIndex);
-    gl.vertexAttribPointer(this.uniformShader.aTangentsIndex, 3, gl.FLOAT, false, 0, 0);
-  }
+    gl.enableVertexAttribArray(shader.aTangentsIndex);
+    gl.vertexAttribPointer(shader.aTangentsIndex, 3, gl.FLOAT, false, 0, 0);
+  }*/
 
   gl.enable(gl.POLYGON_OFFSET_FILL);
   gl.polygonOffset(1.0, 1.0);
 
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, obj.indexBufferTriangles);
-  gl.uniform3fv(this.uniformShader.uColorLocation, fillColor);
+  if(!shadow_pass) gl.uniform3fv(shader.uColorLocation, fillColor);
   gl.drawElements(gl.TRIANGLES, obj.triangleIndices.length, gl.UNSIGNED_SHORT, 0);
 
   gl.disable(gl.POLYGON_OFFSET_FILL);
   
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
-  gl.disableVertexAttribArray(this.uniformShader.aPositionIndex);
+  gl.disableVertexAttribArray(shader.aPositionIndex);
   gl.bindBuffer(gl.ARRAY_BUFFER, null);
+};
+
+Renderer.loadTexture = function (gl,tu, url){
+  var image = new Image();
+  image.src = url;
+  image.addEventListener('load',function(){	
+      gl.activeTexture(gl.TEXTURE0+tu);
+      var texture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D,texture);
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,image);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.REPEAT);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.REPEAT);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR)
+      //TODO
+      //gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_NEAREST);
+      //gl.generateMipmap(gl.TEXTURE_2D);
+  });
 };
 
 /*
@@ -254,37 +347,41 @@ Renderer.initializeObjects = function (gl) {
     Renderer.createObjectBuffers(gl, Game.scene.buildingsObjTex[i].roof)
   }
   
-  Renderer.loadTexture(gl,0,"../common/texture/street4.png");
-  Renderer.loadTexture(gl,1,"../common/texture/facade1.jpg");
-  Renderer.loadTexture(gl,2,"../common/texture/facade2.jpg");
-  Renderer.loadTexture(gl,3,"../common/texture/facade3.jpg");
-  Renderer.loadTexture(gl,4,"../common/texture/roof.jpg");
-  Renderer.loadTexture(gl,5,"../common/texture/grass_tile.png");
-  Renderer.loadTexture(gl,6,"../common/texture/headlight.png");
+  Renderer.loadTexture(gl,3,"../common/texture/street4.png");
+  Renderer.loadTexture(gl,4,"../common/texture/facade1.jpg");
+  Renderer.loadTexture(gl,5,"../common/texture/facade3.jpg");
+  Renderer.loadTexture(gl,6,"../common/texture/roof.jpg");
+  Renderer.loadTexture(gl,7,"../common/texture/grass_tile.png");
+  Renderer.loadTexture(gl,8,"../common/texture/headlight.png");
 };
 
-Renderer.loadTexture = function (gl,tu, url){
-  var image = new Image();
-  image.src = url;
-  image.addEventListener('load',function(){	
-      gl.activeTexture(gl.TEXTURE0+tu);
-      var texture = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D,texture);
-      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,image);
-      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.REPEAT);
-      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.REPEAT);
-      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR)
-      //TODO
-      //gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_NEAREST);
-      //gl.generateMipmap(gl.TEXTURE_2D);
-  });
-} 
+/**
+ * Takes the direction of the light and returns the light matrix for shadow mapping
+ */
+Renderer.createLightMatrix = function (dir) {
+  var dirlight_matrix = glMatrix.mat4.create();
+  var dirlight_proj = glMatrix.mat4.create();
+  glMatrix.mat4.lookAt(dirlight_matrix, [0.0,0.0,0.0], [-dir[0],-dir[1],-dir[2]],[0,1,0]);
+  glMatrix.mat4.ortho(dirlight_proj, -110.0, 110.0, -120.0, 120.0, -100.0, 100.0);
+  glMatrix.mat4.multiply(dirlight_matrix, dirlight_proj, dirlight_matrix);
+  return dirlight_matrix;
+};
 
-/*
-draw the car
-*/
-Renderer.drawCar = function (gl) {
+//TODO
+function createPositionalLightMatrix(pos,target){
+  var light_matrix = glMatrix.mat4.create();
+  var proj = glMatrix.mat4.create();
+  glMatrix.mat4.lookAt(light_matrix,pos,target,[1,0,0]);
+  
+  glMatrix.mat4.perspective(proj, 3.14/2.0, 1.0, 0.05, 13);
+  glMatrix.mat4.mul(light_matrix,proj,light_matrix);
+  return light_matrix;
+}
+
+/**
+ * Draws the car model
+ */
+Renderer.drawCar = function (gl, shader, invV) {
   
   // matrix for transformations
   translate_matrix = glMatrix.mat4.create();
@@ -300,8 +397,8 @@ Renderer.drawCar = function (gl) {
   
   Renderer.stack.push();
   Renderer.stack.multiply(cube_mat);
-  gl.uniformMatrix4fv(this.uniformShader.uModelLocation, false, this.stack.matrix);
-  this.drawObject(gl, this.cube, [0.9, 0, 0.1]);
+  Renderer.updateModelNormalMatrix(gl, this.stack.matrix, invV);
+  this.drawObject(gl, shader, false, this.cube, [0.9, 0, 0.1]);
   Renderer.stack.pop();
 
   pipe_mat = glMatrix.mat4.create();
@@ -319,8 +416,8 @@ Renderer.drawCar = function (gl) {
   
   Renderer.stack.push();
   Renderer.stack.multiply(cube_mat);
-  gl.uniformMatrix4fv(this.uniformShader.uModelLocation, false, this.stack.matrix);
-  this.drawObject(gl, this.cylinder, [0,0.2,0.5]);
+  Renderer.updateModelNormalMatrix(gl, this.stack.matrix, invV);
+  this.drawObject(gl, shader, false, this.cylinder, [0,0.2,0.5]);
   Renderer.stack.pop();
 
   cabin_mat = glMatrix.mat4.create();
@@ -338,8 +435,8 @@ Renderer.drawCar = function (gl) {
   
   Renderer.stack.push();
   Renderer.stack.multiply(cube_mat);
-  gl.uniformMatrix4fv(this.uniformShader.uModelLocation, false, this.stack.matrix);
-  this.drawObject(gl, this.cube, [0.2,0.9,1]);
+  Renderer.updateModelNormalMatrix(gl, this.stack.matrix, invV);
+  this.drawObject(gl, shader, false, this.cube, [0.2,0.9,1]);
   Renderer.stack.pop();
 
   // wheels
@@ -369,8 +466,8 @@ Renderer.drawCar = function (gl) {
   
   Renderer.stack.push();
   Renderer.stack.multiply(cube_mat);
-  gl.uniformMatrix4fv(this.uniformShader.uModelLocation, false, this.stack.matrix);
-  this.drawObject(gl, this.cylinder, [0.1, 0, 0]);
+  Renderer.updateModelNormalMatrix(gl, this.stack.matrix, invV);
+  this.drawObject(gl, shader, false, this.cylinder, [0.1, 0, 0]);
   Renderer.stack.pop();
 
   glMatrix.mat4.fromTranslation(translate_matrix,[2.8,0.9,-2.1]);
@@ -378,8 +475,8 @@ Renderer.drawCar = function (gl) {
 
   Renderer.stack.push();
   Renderer.stack.multiply(cube_mat);
-  gl.uniformMatrix4fv(this.uniformShader.uModelLocation, false, this.stack.matrix);
-  this.drawObject(gl, this.cylinder, [0.1, 0, 0]);
+  Renderer.updateModelNormalMatrix(gl, this.stack.matrix, invV);
+  this.drawObject(gl, shader, false, this.cylinder, [0.1, 0, 0]);
   Renderer.stack.pop(); 
 
   // back wheels
@@ -388,12 +485,12 @@ Renderer.drawCar = function (gl) {
   glMatrix.mat4.mul(wheel_mat2,scale_matrix,wheel_mat2);
 
   glMatrix.mat4.fromTranslation(translate_matrix,[-1,1.6,1.5]);
-  glMatrix.mat4.mul(cube_mat,translate_matrix,wheel_mat2);
+  glMatrix.mat4.mul(cube_mat, translate_matrix,wheel_mat2);
   
   Renderer.stack.push();
   Renderer.stack.multiply(cube_mat);
-  gl.uniformMatrix4fv(this.uniformShader.uModelLocation, false, this.stack.matrix);
-  this.drawObject(gl, this.cylinder, [0.1, 0, 0]);
+  Renderer.updateModelNormalMatrix(gl, this.stack.matrix, invV);
+  this.drawObject(gl, shader, false,this.cylinder, [0.1, 0, 0]);
   Renderer.stack.pop();
 
   glMatrix.mat4.fromTranslation(translate_matrix,[3,1.6,1.5]);
@@ -401,21 +498,31 @@ Renderer.drawCar = function (gl) {
 
   Renderer.stack.push();
   Renderer.stack.multiply(cube_mat);
-  gl.uniformMatrix4fv(this.uniformShader.uModelLocation, false, this.stack.matrix);
-  this.drawObject(gl, this.cylinder, [0.1, 0, 0]);
+  Renderer.updateModelNormalMatrix(gl, this.stack.matrix, invV);
+  this.drawObject(gl, shader, false, this.cylinder, [0.1, 0, 0]);
   Renderer.stack.pop();
 
 };
 
+Renderer.updateModelNormalMatrix = function (gl, ModelMatrix, ViewMatrix) {
+  gl.uniformMatrix4fv(Renderer.uniformShader.uModelMatrixLocation, false, ModelMatrix);
+  let normalMatrix = glMatrix.mat4.create();
+  glMatrix.mat4.multiply(normalMatrix, ViewMatrix, ModelMatrix);
+  glMatrix.mat4.invert(normalMatrix, normalMatrix);
+  glMatrix.mat4.transpose(normalMatrix, normalMatrix);
+  gl.uniformMatrix4fv(Renderer.uniformShader.uNormalMatrixLocation, false, normalMatrix);
+}
 
-Renderer.drawScene = function (gl) {
+Renderer.drawScene = function (gl, shader, shadow_pass, HL) {
 
   var width = this.canvas.width;
   var height = this.canvas.height
   var ratio = width / height;
   this.stack = new MatrixStack();
 
-  gl.viewport(0, 0, width, height);
+  Renderer.gl.useProgram(shader);
+
+  if(!shadow_pass) gl.viewport(0, 0, width, height);
   
   gl.enable(gl.DEPTH_TEST);
 
@@ -423,77 +530,22 @@ Renderer.drawScene = function (gl) {
   gl.clearColor(0.34, 0.5, 0.74, 1.0);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-  gl.useProgram(this.uniformShader);
-  
-  gl.uniformMatrix4fv(this.uniformShader.uProjectionMatrixLocation, false,glMatrix.mat4.perspective(glMatrix.mat4.create(),3.14 / 4, ratio, 1, 500));
-  gl.uniform3fv(this.uniformShader.uLightDirectionLocation, Game.scene.weather.sunLightDirection);
+  // Create the light matrix for the depth shader
+  dirlight_mat = Renderer.createLightMatrix(Game.scene.weather.sunLightDirection);
+  if(HL == 0) gl.uniformMatrix4fv(shader.uLightMatrixLocation, false, dirlight_mat);
 
   Renderer.cameras[Renderer.currentCamera].update(this.car.frame);
   var invV = Renderer.cameras[Renderer.currentCamera].matrix();
   
-  // initialize the stack with the identity
-  this.stack.loadIdentity();
-
-  this.stack.push();
-  this.stack.multiply(this.car.frame);
-  this.drawCar(gl);
-  this.stack.pop();
-
-  gl.uniformMatrix4fv(this.uniformShader.uModelLocation, false, this.stack.matrix);
-  gl.uniformMatrix4fv(this.uniformShader.uViewMatrixLocation, false, invV);
-
-  // drawing the static elements (ground, track and buldings)
-  gl.uniform1i(this.uniformShader.uSamplerLocation,5);
-	this.drawObject(gl, Game.scene.groundObj, [0.3, 0.7, 0.2]);
-  gl.uniform1i(this.uniformShader.uSamplerLocation,0);
- 	this.drawObject(gl, Game.scene.trackObj, [0.9, 0.8, 0.7]);
-  
-	for (var i in Game.scene.buildingsObj) {
-    if(i%2 == 0) gl.uniform1i(this.uniformShader.uSamplerLocation,1);
-    else if(i == 3 || i == 7) gl.uniform1i(this.uniformShader.uSamplerLocation,2);
-          else gl.uniform1i(this.uniformShader.uSamplerLocation,3);
-    this.drawObject(gl, Game.scene.buildingsObjTex[i], [0.8, 0.8, 0.8]);
-  }
-		
-  gl.uniform1i(this.uniformShader.uSamplerLocation,4);
-  for (var i in Game.scene.buildingsObj) 
-    this.drawObject(gl, Game.scene.buildingsObjTex[i].roof, [0.9, 0.8, 0.7]);
-  
-  // drawing lamps
-  let lamp_mat = glMatrix.mat4.create();
-  let light_mat = glMatrix.mat4.create();
-   
-  let lamps = [];
-
-  for (var i = 0; i < Game.scene.lamps.length; ++i) {
-    glMatrix.mat4.identity(lamp_mat);
-    Renderer.stack.push();
-    Renderer.stack.multiply(glMatrix.mat4.fromTranslation(lamp_mat,Game.scene.lamps[i].position));
-    Renderer.stack.multiply(glMatrix.mat4.fromScaling(lamp_mat, [0.2, 4, 0.2]));
-    gl.uniformMatrix4fv(this.uniformShader.uModelLocation, false, this.stack.matrix);
-    this.drawObject(gl, this.cylinder, [0.1, 0.1, 0.1]);
-    Renderer.stack.pop();
-    let lamp_pos = glMatrix.vec3.create();
-    glMatrix.vec3.add(lamp_pos, Game.scene.lamps[i].position, [0.0, 7.0, 0.0]);
-    glMatrix.mat4.identity(light_mat);
-    Renderer.stack.push();
-    Renderer.stack.multiply(glMatrix.mat4.fromTranslation(light_mat, lamp_pos));
-    Renderer.stack.multiply(glMatrix.mat4.fromScaling(light_mat, [0.5, 0.5, 0.5]));
-    gl.uniformMatrix4fv(this.uniformShader.uModelLocation, false, this.stack.matrix);
-    this.drawObject(gl, this.cube, [1, 1, 1]);
-    Renderer.stack.pop();
-    for(var j = 0; j < 3; ++j)
-     lamps.splice((i*3)+j, 0, lamp_pos[j]);
-  }
-
-  for (var i = 0; i < 12; ++i) {
-    gl.uniform3fv(this.uniformShader.uLampPositionsLocation, lamps);
+  if(!shadow_pass) {
+    gl.uniformMatrix4fv(shader.uProjectionMatrixLocation, false,glMatrix.mat4.perspective(glMatrix.mat4.create(),3.14 / 4, ratio, 1, 500));
+    gl.uniform3fv(shader.uLightDirectionLocation, Game.scene.weather.sunLightDirection);
+    gl.uniformMatrix4fv(shader.uViewMatrixLocation, false, invV);
   }
 
   //headlights
-
   // position of the headlights
-  gl.uniform1i(this.uniformShader.uSamplerHLLocation,6);
+  gl.uniform1i(shader.uSamplerHLLocation,8);
   let hl_left_eye = glMatrix.vec4.create();
   let hl_right_eye = glMatrix.vec4.create();
   glMatrix.mat4.multiply(hl_left_eye, Renderer.car.frame, [-0.2,2,2.8,1]);
@@ -507,17 +559,120 @@ Renderer.drawScene = function (gl) {
   let hl_left = glMatrix.mat4.lookAt(glMatrix.mat4.create(), hl_left_eye, hl_left_target, [0,1,0]);
   let hl_right = glMatrix.mat4.lookAt(glMatrix.mat4.create(), hl_right_eye, hl_right_target, [0,1,0]);
 
-  let hl_projection = glMatrix.mat4.perspective(glMatrix.mat4.create(), Math.PI/5, 1,6.2, 70);
+  let hl_projection = glMatrix.mat4.perspective(glMatrix.mat4.create(), Math.PI/5, 1,6.2, 30);
+  if(!shadow_pass) {
+    gl.uniformMatrix4fv(shader.uHeadLightLeftViewLocation, false, hl_left);
+    gl.uniformMatrix4fv(shader.uHeadLightRightViewLocation, false, hl_right);
+    gl.uniformMatrix4fv(shader.uHeadLightProjectionLocation, false, hl_projection);
+  } else {
+    if(HL > 0) {
+      let hl_lightmat = glMatrix.mat4.create();
+      if(HL == 1) glMatrix.mat4.multiply(hl_lightmat, hl_projection, hl_left);
+        else glMatrix.mat4.multiply(hl_lightmat, hl_projection, hl_right);
+      gl.uniformMatrix4fv(shader.uLightMatrixLocation, false, hl_lightmat);
+    }
+  }
 
-  gl.uniformMatrix4fv(this.uniformShader.uHeadLightLeftViewLocation, false, hl_left);
-  gl.uniformMatrix4fv(this.uniformShader.uHeadLightRightViewLocation, false, hl_right);
-  gl.uniformMatrix4fv(this.uniformShader.uHeadLightProjectionLocation, false, hl_projection);
+  // initialize the stack with the identity
+  this.stack.loadIdentity();
+
+  this.stack.push();
+  if(!shadow_pass) {
+    this.stack.multiply(this.car.frame);
+    this.drawCar(gl, shader, invV);
+    this.stack.pop();
+  }
+
+  if(shadow_pass) gl.uniformMatrix4fv(shader.uModelMatrixLocation, false, this.stack.matrix);
+    else Renderer.updateModelNormalMatrix(gl, this.stack.matrix, invV);
+  // drawing the static elements (ground, track and buldings)
+  if(!shadow_pass) gl.uniform1i(shader.uSamplerLocation,7);
+	this.drawObject(gl, shader, shadow_pass, Game.scene.groundObj, [0.3, 0.7, 0.2]);
+  if(!shadow_pass) gl.uniform1i(shader.uSamplerLocation,3);
+ 	this.drawObject(gl, shader, shadow_pass, Game.scene.trackObj, [0.9, 0.8, 0.7]);
   
+	for (var i in Game.scene.buildingsObj) {
+    if(i%2 == 0) {if(!shadow_pass) gl.uniform1i(shader.uSamplerLocation,4);}
+    else if(!shadow_pass) gl.uniform1i(shader.uSamplerLocation,5);
+    this.drawObject(gl, shader, shadow_pass, Game.scene.buildingsObjTex[i], [0.8, 0.8, 0.8]);
+  }
+		
+  if(!shadow_pass)gl.uniform1i(shader.uSamplerLocation,6);
+  for (var i in Game.scene.buildingsObj) 
+    this.drawObject(gl, shader, shadow_pass, Game.scene.buildingsObjTex[i].roof, [0.9, 0.8, 0.7]);
+  
+  if(!shadow_pass) {
+    // drawing lamps
+    let lamp_mat = glMatrix.mat4.create();
+    let light_mat = glMatrix.mat4.create();
+    
+    let lamps = [];
+
+    for (var i = 0; i < Game.scene.lamps.length; ++i) {
+      glMatrix.mat4.identity(lamp_mat);
+      Renderer.stack.push();
+      Renderer.stack.multiply(glMatrix.mat4.fromTranslation(lamp_mat,Game.scene.lamps[i].position));
+      Renderer.stack.multiply(glMatrix.mat4.fromScaling(lamp_mat, [0.2, 4, 0.2]));
+      if(shadow_pass) gl.uniformMatrix4fv(shader.uModelMatrixLocation, false, this.stack.matrix);
+        else Renderer.updateModelNormalMatrix(gl, this.stack.matrix, invV);
+      this.drawObject(gl, shader, shadow_pass, this.cylinder, [0.1, 0.1, 0.1]);
+      Renderer.stack.pop();
+      let lamp_pos = glMatrix.vec3.create();
+      glMatrix.vec3.add(lamp_pos, Game.scene.lamps[i].position, [0.0, 7.0, 0.0]);
+      glMatrix.mat4.identity(light_mat);
+      Renderer.stack.push();
+      Renderer.stack.multiply(glMatrix.mat4.fromTranslation(light_mat, lamp_pos));
+      Renderer.stack.multiply(glMatrix.mat4.fromScaling(light_mat, [0.5, 0.5, 0.5]));
+      if(shadow_pass) gl.uniformMatrix4fv(shader.uModelMatrixLocation, false, this.stack.matrix);
+        else Renderer.updateModelNormalMatrix(gl, this.stack.matrix, invV);
+      this.drawObject(gl, shader, shadow_pass, this.cube, [0.3, 0.4, 0.4]);
+      Renderer.stack.pop();
+      for(var j = 0; j < 3; ++j)
+      if(j == 1) lamps.splice((i*3)+j, 0, lamp_pos[j]+3.0);
+        else lamps.splice((i*3)+j, 0, lamp_pos[j]);
+    }
+
+    for (var i = 0; i < 12; ++i) {
+      gl.uniform3fv(shader.uLampPositionsLocation, lamps);
+    }
+  }
+
+ 
   gl.useProgram(null);
 };
 
 Renderer.Display = function () {
-  Renderer.drawScene(Renderer.gl);
+  
+    //TODO
+  Renderer.gl.enable(Renderer.gl.CULL_FACE);
+  Renderer.gl.cullFace(Renderer.gl.FRONT);
+
+  Renderer.gl.viewport(0,0, Renderer.shadowMapSize, Renderer.shadowMapSize);
+  Renderer.gl.clearDepth(1.0);
+
+  // shadow pass
+  Renderer.gl.bindFramebuffer(Renderer.gl.FRAMEBUFFER, Renderer.framebuffer);
+  Renderer.gl.clear(Renderer.gl.COLOR_BUFFER_BIT|Renderer.gl.DEPTH_BUFFER_BIT);
+
+  Renderer.drawScene(Renderer.gl, Renderer.depthShader, true, 0);
+
+  // shadow pass left headlight
+  Renderer.gl.bindFramebuffer(Renderer.gl.FRAMEBUFFER, Renderer.framebuffer_HLL);
+  Renderer.gl.clear(Renderer.gl.COLOR_BUFFER_BIT|Renderer.gl.DEPTH_BUFFER_BIT);
+  
+  Renderer.drawScene(Renderer.gl, Renderer.depthShader, true, 1);
+  
+  // shadow pass right headlight
+  Renderer.gl.bindFramebuffer(Renderer.gl.FRAMEBUFFER, Renderer.framebuffer_HLR);
+  Renderer.gl.clear(Renderer.gl.COLOR_BUFFER_BIT|Renderer.gl.DEPTH_BUFFER_BIT);
+  
+  Renderer.drawScene(Renderer.gl, Renderer.depthShader, true, 2);
+  Renderer.gl.bindFramebuffer(Renderer.gl.FRAMEBUFFER, null);
+  
+  Renderer.gl.disable(Renderer.gl.CULL_FACE);
+
+  // light pass  
+  Renderer.drawScene(Renderer.gl, Renderer.uniformShader, false, 0);
   window.requestAnimationFrame(Renderer.Display) ;
 };
 
@@ -529,6 +684,7 @@ Renderer.setupAndStart = function () {
 	Renderer.gl = Renderer.canvas.getContext("webgl");
 
   Renderer.gl.getExtension('OES_standard_derivatives');
+  Renderer.gl.getExtension('WEBGL_depth_texture');
 
   /* read the webgl version and log */
 	var gl_version = Renderer.gl.getParameter(Renderer.gl.VERSION); 
@@ -542,9 +698,26 @@ Renderer.setupAndStart = function () {
   /* initialize objects to be rendered */
   Renderer.initializeObjects(Renderer.gl);
 
-  /* create the shader */
+  /* create the shaders */
   Renderer.uniformShader = new uniformShader(Renderer.gl);
+  Renderer.depthShader = new depthShader(Renderer.gl);
+  Renderer.gl.useProgram(Renderer.uniformShader);
+  
+  Renderer.framebuffer = Renderer.createFramebuffer(Renderer.gl, Renderer.shadowMapSize);
+  Renderer.gl.activeTexture(Renderer.gl.TEXTURE0);
+  Renderer.gl.bindTexture(Renderer.gl.TEXTURE_2D, Renderer.framebuffer.depthTexture);
+  Renderer.gl.uniform1i(Renderer.uniformShader.uDepthSamplerLocation,0);
 
+  Renderer.framebuffer_HLL = Renderer.createFramebuffer(Renderer.gl, Renderer.shadowMapSize);
+  Renderer.gl.activeTexture(Renderer.gl.TEXTURE1);
+  Renderer.gl.bindTexture(Renderer.gl.TEXTURE_2D, Renderer.framebuffer_HLL.depthTexture);
+  Renderer.gl.uniform1i(Renderer.uniformShader.uDepthHLLSamplerLocation,1);
+
+  Renderer.framebuffer_HLR = Renderer.createFramebuffer(Renderer.gl, Renderer.shadowMapSize);
+  Renderer.gl.activeTexture(Renderer.gl.TEXTURE2);
+  Renderer.gl.bindTexture(Renderer.gl.TEXTURE_2D, Renderer.framebuffer_HLR.depthTexture);
+  Renderer.gl.uniform1i(Renderer.uniformShader.uDepthHLRSamplerLocation,2);
+  
   /*
   add listeners for the mouse / keyboard events
   */
