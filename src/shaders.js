@@ -93,11 +93,13 @@ uniformShader = function (gl) {
       precision highp float;                         
       uniform vec3 uColor;
       uniform sampler2D uSampler;
+      uniform sampler2D uNormalSampler;
       uniform sampler2D uSamplerHL;
       uniform sampler2D uDepthSampler;
       uniform sampler2D uDepthSamplerHLL;
       uniform sampler2D uDepthSamplerHLR;
-      uniform int uTextMode;
+      uniform int uTextMode; // 0 = Texture; 1 = No Texture; 2 = NormalMapping
+      uniform float uShadowMapSize;
       
       uniform vec3 uLightDirection;
       varying vec3 vShadedColor;
@@ -116,7 +118,7 @@ uniformShader = function (gl) {
 
       varying vec4 vDepthTexCoords; 
 
-      const float kamb = 0.0;
+      const float kamb = 0.2;
   
       void main(void)                                
       { 
@@ -130,8 +132,12 @@ uniformShader = function (gl) {
 
         // Ambient lighting
         vec3 ambient = currColor * kamb;
+        
+        vec3 N;
 
-        vec3 N = normalize(cross(dFdx(vPosVS),dFdy(vPosVS)));
+        if(uTextMode < 2) N = normalize(cross(dFdx(vPosVS),dFdy(vPosVS)));
+          else N = texture2D(uNormalSampler, vTexCoords).xyz;
+
         // diffusive
         float L_diffuse = max(dot(vLVS,N),0.3);
         // specular
@@ -160,7 +166,7 @@ uniformShader = function (gl) {
           float storedDepth;
           for( float x = 0.0; x < 5.0; x+=1.0)
 						for( float y = 0.0; y < 5.0; y+=1.0) {
-              storedDepth = texture2D(uDepthSampler, tC.xy).x;
+              storedDepth =  texture2D(uDepthSampler,tC.xy+vec2(-2.0+x,-2.0+y)/uShadowMapSize).x;
               // Is the fragment in shadow?
               if(storedDepth <= tC.z || dot(N,vLVS)<0.0)
               light_contr -= 0.5/25.0;
@@ -245,9 +251,11 @@ uniformShader = function (gl) {
     shaderProgram.uNormalMatrixLocation = gl.getUniformLocation(shaderProgram, "uNormalMatrix");
     shaderProgram.uColorLocation = gl.getUniformLocation(shaderProgram, "uColor");
     shaderProgram.uSamplerLocation = gl.getUniformLocation(shaderProgram, "uSampler");
+    shaderProgram.uNormalSamplerLocation = gl.getUniformLocation(shaderProgram, "uNormalSampler");
     shaderProgram.uSamplerHLLocation = gl.getUniformLocation(shaderProgram, "uSamplerHL");
     shaderProgram.uDepthSamplerLocation = gl.getUniformLocation(shaderProgram, "uDepthSampler");
     shaderProgram.uLightMatrixLocation = gl.getUniformLocation(shaderProgram, "uLightMatrix");
+    shaderProgram.uShadowMapSizeLocation = gl.getUniformLocation(shaderProgram, "uShadowMapSize");
     shaderProgram.uLightDirectionLocation  = gl.getUniformLocation(shaderProgram, "uLightDirection");
     shaderProgram.uLampPositionsLocation = gl.getUniformLocation(shaderProgram, "uLampPositions");
     shaderProgram.uTextModeLocation = gl.getUniformLocation(shaderProgram, "uTextMode");
