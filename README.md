@@ -5,6 +5,7 @@ Progetto per il corso di Computer Grafica dell'Universita' di Pisa
 Comandi:
 
 WASD - movimento
+
 E - cambiare telecamera
 
   1. FromUpCamera
@@ -14,4 +15,5 @@ E - cambiare telecamera
 Comandi FreeCamera:
 
 Frecce - muovere telecamera
+
 Mouse - indirizzare telecamera
