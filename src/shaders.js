@@ -20,10 +20,7 @@ uniformShader = function (gl) {
       attribute vec3 aPosition;
       attribute vec3 aNormal;
       attribute vec2 aTexCoords;
-  
-      // computed color to be interpolated 
-      varying vec3 vShadedColor;  
-      
+       
       // transformed position to be interpolated
       varying vec3 vPosVS;
       // transformed light direction in view space
@@ -33,6 +30,7 @@ uniformShader = function (gl) {
 
       // view direction to be interpolated
       varying vec3 vViewVS;
+      varying vec3 vNVS;
 
       varying vec2 vTexCoords; 
       varying vec4 vHLLposProjVS;
@@ -57,13 +55,7 @@ uniformShader = function (gl) {
         vec3 lightDirectionVS = normalize((uViewMatrix * vec4(uLightDirection,0.0))).xyz;
         
         // normal in view space per vertex
-        vec3 normalVS = normalize(uNormalMatrix  * vec4(aNormal,0.0)).xyz;
-  
-        // cosine term for diffuse component, if negative ignore
-        float L_diffuse = max(dot(lightDirectionVS,normalVS),0.0);
-  
-        // use uColor ase base diffuse and multiply for cosine term
-        vShadedColor = uColor*L_diffuse;  
+        vNVS = normalize(uNormalMatrix  * vec4(aNormal,0.0)).xyz;
         
         // vertex view space position
         vPosVS = (toViewSpace *	vec4(aPosition, 1.0)).xyz;
@@ -72,7 +64,7 @@ uniformShader = function (gl) {
         vLVS = lightDirectionVS;
         // view direction in view space
         vViewVS = normalize(-vPosVS);
-
+        
         //headlights
         vHLLposVS = uHeadLightLeftView*uModelMatrix*vec4(aPosition, 1.0);
         vHLRposVS = uHeadLightRightView*uModelMatrix*vec4(aPosition, 1.0);
@@ -98,15 +90,16 @@ uniformShader = function (gl) {
       uniform sampler2D uDepthSampler;
       uniform sampler2D uDepthSamplerHLL;
       uniform sampler2D uDepthSamplerHLR;
-      uniform int uTextMode; // 0 = Texture; 1 = No Texture; 2 = NormalMapping
+      uniform int uMode; // 0 = No Texture; 1 = Texture; 2 = NormalMapping
       uniform float uShadowMapSize;
       
       uniform vec3 uLightDirection;
-      varying vec3 vShadedColor;
 
       varying vec3 vPosVS;
       varying vec3 vLVS;
       varying vec3 vViewVS;
+      varying vec3 vNVS;
+
       varying vec3 vLPVS[12];
       varying vec3 vLampDirVS;
 
@@ -118,7 +111,8 @@ uniformShader = function (gl) {
 
       varying vec4 vDepthTexCoords; 
 
-      const float kamb = 0.2;
+      const float kamb = 0.1;
+      float bias = 0.0007;
   
       void main(void)                                
       { 
@@ -126,7 +120,7 @@ uniformShader = function (gl) {
         vec3 currColor;
         
         // If the object has no texture coordinates use its color
-        if(uTextMode == 0)
+        if(uMode == 0)
           currColor = uColor;
         else currColor = texture2D(uSampler,vTexCoords).xyz;
 
@@ -134,16 +128,21 @@ uniformShader = function (gl) {
         vec3 ambient = currColor * kamb;
         
         vec3 N;
+        // phong shading
+        if(uMode == 0) N = normalize(vNVS);
+        // Flat Shading
+        if(uMode == 1) N = normalize(cross(dFdx(vPosVS),dFdy(vPosVS)));
+        // normal mapping
+        if(uMode == 2) N = texture2D(uNormalSampler, vTexCoords).xyz;
 
-        if(uTextMode < 2) N = normalize(cross(dFdx(vPosVS),dFdy(vPosVS)));
-          else N = texture2D(uNormalSampler, vTexCoords).xyz;
+        vec3 normLVS = normalize(vLVS);
 
         // diffusive
-        float L_diffuse = max(dot(vLVS,N),0.3);
+        float L_diffuse = max(dot(normLVS,N),0.0);
         // specular
-        vec3 R = -vLVS+2.0 * dot(vLVS,N)*N;
+        vec3 R = -normLVS + 2.0*dot(normLVS,N)*N;
         vec3 k_spec = currColor+vec3(0.0,0.0,currColor.z*1.3);
-        float specular = max(0.0,pow(dot(vViewVS,R),5.0));
+        float specular = max(0.0, pow(dot(vViewVS,R), 1.0));
         
         // lamps
         for (int i = 0; i < 12; i++) {
@@ -153,12 +152,11 @@ uniformShader = function (gl) {
 
           float SL_diffuse = max(0.0, dot(toLight, N));
           float angleSur = dot(vLampDirVS, -toLight);
-          float spot = smoothstep(0.9, 1.0, angleSur * 1.2);
+          float spot = smoothstep(0.7, 1.0, angleSur * 1.2);
           if ( angleSur > 0.0) L_diffuse += (SL_diffuse * spot);
         
         }
-        
-        
+                
         // Texture coordinates where the depth map is accessed for this specific fragment
         vec3 tC = ((vDepthTexCoords/vDepthTexCoords.w).xyz) * 0.5 + 0.5;
 
@@ -166,9 +164,9 @@ uniformShader = function (gl) {
           float storedDepth;
           for( float x = 0.0; x < 5.0; x+=1.0)
 						for( float y = 0.0; y < 5.0; y+=1.0) {
-              storedDepth =  texture2D(uDepthSampler,tC.xy+vec2(-2.0+x,-2.0+y)/uShadowMapSize).x;
+              storedDepth =  texture2D(uDepthSampler,tC.xy + vec2(-2.0+x,-2.0+y)/uShadowMapSize).x;
               // Is the fragment in shadow?
-              if(storedDepth <= tC.z || dot(N,vLVS)<0.0)
+              if(storedDepth+bias <= tC.z || dot(N,normalize(vLVS)) < 0.0)
               light_contr -= 0.5/25.0;
           }
         }
@@ -183,30 +181,34 @@ uniformShader = function (gl) {
         float HLLDepth = texture2D(uDepthSamplerHLL, HLLTexCoords.xy).x;
         float HLRDepth = texture2D(uDepthSamplerHLR, HLRTexCoords.xy).x;
         
+        vec3 finalHLLColor;
+        vec3 finalHLRColor;
+
         if(HLLTexCoords.x <= 1.0 
           && HLLTexCoords.y <= 1.0 
           && HLLTexCoords.z <= 1.0 
           && HLLTexCoords.x >= 0.0 
           && HLLTexCoords.y >= 0.0 
           && HLLTexCoords.z >= 0.0 
-          && HLLDepth > HLLTexCoords.z) {
+          && (HLLDepth+bias > HLLTexCoords.z)) {
           float d = length(vHLLposVS);
           float falloffL = max(0.0, min(50.0, 80.0 / (d*d - d)));
-          currColor += HLLColor * falloffL;
+          finalHLLColor += HLLColor * falloffL;
         }
+
         if(HLRTexCoords.x <= 1.0 
           && HLRTexCoords.y <= 1.0 
           && HLRTexCoords.z <= 1.0 
           && HLRTexCoords.x >= 0.0 
           && HLRTexCoords.y >= 0.0 
           && HLRTexCoords.z >= 0.0
-          && HLRDepth > HLRTexCoords.z) {
+          && HLRDepth+bias > HLRTexCoords.z) {
           float d = length(vHLRposVS);
           float falloffR = max(0.0, min(50.0, 80.0 / (d*d - d)));
-          currColor += HLRColor * falloffR; 
+          finalHLRColor += HLRColor * falloffR; 
         }
 
-        gl_FragColor = vec4((ambient + currColor*L_diffuse + k_spec*specular) *light_contr,1.0);        
+        gl_FragColor = vec4((ambient + currColor*L_diffuse + k_spec*specular + finalHLLColor + finalHLRColor) *light_contr,1.0);        
       }                                             
     `;
   
@@ -258,7 +260,7 @@ uniformShader = function (gl) {
     shaderProgram.uShadowMapSizeLocation = gl.getUniformLocation(shaderProgram, "uShadowMapSize");
     shaderProgram.uLightDirectionLocation  = gl.getUniformLocation(shaderProgram, "uLightDirection");
     shaderProgram.uLampPositionsLocation = gl.getUniformLocation(shaderProgram, "uLampPositions");
-    shaderProgram.uTextModeLocation = gl.getUniformLocation(shaderProgram, "uTextMode");
+    shaderProgram.uModeLocation = gl.getUniformLocation(shaderProgram, "uMode");
     shaderProgram.uHeadLightLeftViewLocation  = gl.getUniformLocation(shaderProgram, "uHeadLightLeftView");
     shaderProgram.uHeadLightRightViewLocation = gl.getUniformLocation(shaderProgram, "uHeadLightRightView");
     shaderProgram.uHeadLightProjectionLocation = gl.getUniformLocation(shaderProgram, "uHeadLightProjection");
