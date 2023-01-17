@@ -58,17 +58,13 @@ ChaseCamera = function(){
 UserCamera = function(){
   
   let translation = glMatrix.vec3.create();
-  let rotationY = 0.0;
-  let rotationX = 0.0;
 
-  let mouseX = 0.0;
-  let mouseY = 0.0;
-  let mouseDown = false;
 
   let rotate_camera = glMatrix.mat4.create();
   
   /* update the camera */
   this.update = function(car_position){
+    console.log("rotationX in update:" + Renderer.rotationX);
     let x_axis = glMatrix.vec4.fromValues(1,0,0,0);
     let y_axis = glMatrix.vec4.fromValues(0,1,0,0);
     let z_axis = glMatrix.vec4.fromValues(0,0,1,0);
@@ -96,11 +92,6 @@ UserCamera = function(){
       glMatrix.vec3.subtract(translation, translation, move_x);
     if(Renderer.car.control_keys["ArrowRight"])
       glMatrix.vec3.add(translation, translation, move_x);  
-
-    if(this.mouseDown == true) {
-      rotationY -= (this.mouseX - 300) * 0.00001;
-      rotationX -= (this.mouseY - 300) * 0.00001;
-    }
   }
   
   /* return the transformation matrix to transform from worlod coordiantes to the view reference frame */
@@ -111,11 +102,10 @@ UserCamera = function(){
     glMatrix.mat4.fromTranslation(translate_camera, translation);
     
     let x_rotate = glMatrix.mat4.create();
-    glMatrix.mat4.fromRotation(x_rotate, rotationX, [1,0,0]);
+    glMatrix.mat4.fromRotation(x_rotate, Renderer.rotationX, [1,0,0]);
 
     let y_rotate = glMatrix.mat4.create();
-    glMatrix.mat4.fromRotation(y_rotate, rotationY, [0,1,0]);
-
+    glMatrix.mat4.fromRotation(y_rotate, Renderer.rotationY, [0,1,0]);
     glMatrix.mat4.multiply(rotate_camera, y_rotate, x_rotate);
     glMatrix.mat4.multiply(move_camera, translate_camera, rotate_camera);
 
@@ -139,6 +129,12 @@ Renderer.cameras.push(new UserCamera());
 Renderer.currentCamera = 0;
 // Number of pixels dedicated to the shadow map
 Renderer.shadowMapSize = 2048;
+
+Renderer.lastY = 300.0;
+Renderer.lastX = 300.0;
+Renderer.rotationY = 0.0;
+Renderer.rotationX = 0.0;
+Renderer.mouseDown = false;
 
 /**
  * Create the buffers for an object as specified in common/shapes/triangle.js
@@ -339,10 +335,6 @@ Renderer.initializeObjects = function (gl) {
   Game.setScene(scene_0);
   this.car = Game.addCar("cubecar");
 
-  Renderer.triangle = new Triangle();
-  ComputeNormals(Renderer.triangle);
-  Renderer.createObjectBuffers(gl, this.triangle);
-
   Renderer.cube = new Cube();
   ComputeNormals(Renderer.cube);
   Renderer.createObjectBuffers(gl, this.cube);
@@ -406,7 +398,7 @@ Renderer.drawCar = function (gl, shader, invV) {
   Renderer.stack.push();
   Renderer.stack.multiply(cube_mat);
   Renderer.updateModelNormalMatrix(gl, this.stack.matrix, invV);
-  this.drawObject(gl, shader, false, this.cube, [0.9, 0, 0.1]);
+  this.drawObject(gl, shader, false, this.cube, [0.7, 0, 0.1]);
   Renderer.stack.pop();
 
   pipe_mat = glMatrix.mat4.create();
@@ -425,7 +417,7 @@ Renderer.drawCar = function (gl, shader, invV) {
   Renderer.stack.push();
   Renderer.stack.multiply(cube_mat);
   Renderer.updateModelNormalMatrix(gl, this.stack.matrix, invV);
-  this.drawObject(gl, shader, false, this.cylinder, [0,0.5,0.9]);
+  this.drawObject(gl, shader, false, this.cylinder, [0,0.4,0.6]);
   Renderer.stack.pop();
 
   cabin_mat = glMatrix.mat4.create();
@@ -449,8 +441,7 @@ Renderer.drawCar = function (gl, shader, invV) {
 
   // wheels
   wheel_mat = glMatrix.mat4.create();
-  wheel_speed = 0;
-  glMatrix.mat4.fromRotation(rotate_matrix,3.14/2.0,[0,0,1]);
+  glMatrix.mat4.fromRotation(rotate_matrix, 3.14/2.0,[0,0,1]);
   glMatrix.mat4.fromScaling(scale_matrix, [1,1,1]);
   glMatrix.mat4.mul(wheel_mat, rotate_matrix, scale_matrix);
 
@@ -459,7 +450,7 @@ Renderer.drawCar = function (gl, shader, invV) {
   // rotate the wheels according to speed
   glMatrix.mat4.fromRotation(rotate_matrix, Renderer.car.rotationAngle,[1,0,0]);
   glMatrix.mat4.mul(wheel_mat, rotate_matrix, wheel_mat);
-
+  
   // saving changes so the back wheels won't turn
   wheel_mat2 = glMatrix.mat4.clone(wheel_mat);
 
@@ -475,7 +466,7 @@ Renderer.drawCar = function (gl, shader, invV) {
   Renderer.stack.push();
   Renderer.stack.multiply(cube_mat);
   Renderer.updateModelNormalMatrix(gl, this.stack.matrix, invV);
-  this.drawObject(gl, shader, false, this.cylinder, [0.3, 0.2, 0.2]);
+  this.drawObject(gl, shader, false, this.cylinder, [0.4, 0.2, 0.2]);
   Renderer.stack.pop();
 
   glMatrix.mat4.fromTranslation(translate_matrix,[2.8,0.9,-2.1]);
@@ -484,7 +475,7 @@ Renderer.drawCar = function (gl, shader, invV) {
   Renderer.stack.push();
   Renderer.stack.multiply(cube_mat);
   Renderer.updateModelNormalMatrix(gl, this.stack.matrix, invV);
-  this.drawObject(gl, shader, false, this.cylinder, [0.3, 0.2, 0.2]);
+  this.drawObject(gl, shader, false, this.cylinder, [0.4, 0.2, 0.2]);
   Renderer.stack.pop(); 
 
   // back wheels
@@ -498,7 +489,7 @@ Renderer.drawCar = function (gl, shader, invV) {
   Renderer.stack.push();
   Renderer.stack.multiply(cube_mat);
   Renderer.updateModelNormalMatrix(gl, this.stack.matrix, invV);
-  this.drawObject(gl, shader, false,this.cylinder, [0.3, 0.2, 0.2]);
+  this.drawObject(gl, shader, false,this.cylinder, [0.4, 0.2, 0.2]);
   Renderer.stack.pop();
 
   glMatrix.mat4.fromTranslation(translate_matrix,[3,1.6,1.5]);
@@ -507,7 +498,7 @@ Renderer.drawCar = function (gl, shader, invV) {
   Renderer.stack.push();
   Renderer.stack.multiply(cube_mat);
   Renderer.updateModelNormalMatrix(gl, this.stack.matrix, invV);
-  this.drawObject(gl, shader, false, this.cylinder, [0.3, 0.2, 0.2]);
+  this.drawObject(gl, shader, false, this.cylinder, [0.4, 0.2, 0.2]);
   Renderer.stack.pop();
 
 };
@@ -609,7 +600,7 @@ Renderer.drawScene = function (gl, shader, shadow_pass, HL) {
       Renderer.stack.multiply(glMatrix.mat4.fromScaling(light_mat, [0.6, 0.3, 0.5]));
       if(HL > 0) gl.uniformMatrix4fv(shader.uModelMatrixLocation, false, this.stack.matrix);
         else Renderer.updateModelNormalMatrix(gl, this.stack.matrix, invV);
-      this.drawObject(gl, shader, shadow_pass, this.cylinder, [0.1, 0.9, 0.7]);
+      this.drawObject(gl, shader, shadow_pass, this.cylinder, [0.1, 0.5, 0.6]);
       Renderer.stack.pop();
       for(var j = 0; j < 3; ++j)
       if(j == 1) lamps.splice((i*3)+j, 0, lamp_pos[j]+2.0);
@@ -754,14 +745,19 @@ Renderer.setupAndStart = function () {
 }
 
 on_mouseup = function(e) {
-  Renderer.cameras[2].mouseDown = false;
+  Renderer.mouseDown = false;
 }
 on_mousedown = function(e) {
-  Renderer.cameras[2].mouseDown = true;
+  Renderer.mouseDown = true;
 }
 on_mouseMove = function(e){
-  Renderer.cameras[2].mouseX = e.clientX;
-  Renderer.cameras[2].mouseY = e.clientY;
+
+  if(Renderer.mouseDown == true) {
+    Renderer.rotationY += Math.sign(Renderer.lastX - e.clientX) * 0.03;
+    Renderer.rotationX += Math.sign(Renderer.lastY - e.clientY) * 0.03;
+    Renderer.lastX = e.clientX;
+    Renderer.lastY = e.clientY;
+  } else return;
 }
 
 on_ekey = function(){

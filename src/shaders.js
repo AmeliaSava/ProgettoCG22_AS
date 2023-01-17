@@ -55,7 +55,7 @@ uniformShader = function (gl) {
         vec3 lightDirectionVS = normalize((uViewMatrix * vec4(uLightDirection,0.0))).xyz;
         
         // normal in view space per vertex
-        vNVS = normalize(uNormalMatrix  * vec4(aNormal,0.0)).xyz;
+        vNVS = normalize(uNormalMatrix * vec4(aNormal,0.0)).xyz;
         
         // vertex view space position
         vPosVS = (toViewSpace *	vec4(aPosition, 1.0)).xyz;
@@ -129,7 +129,7 @@ uniformShader = function (gl) {
         
         vec3 N;
         // phong shading
-        if(uMode == 0) N = normalize(vNVS);
+        if(uMode == 0)  N = normalize(vNVS);
         // Flat Shading
         if(uMode == 1) N = normalize(cross(dFdx(vPosVS),dFdy(vPosVS)));
         // normal mapping
@@ -143,7 +143,7 @@ uniformShader = function (gl) {
         vec3 R = -normLVS + 2.0*dot(normLVS,N)*N;
         vec3 k_spec = currColor+vec3(0.0,0.0,currColor.z*1.3);
         float specular = max(0.0, pow(dot(vViewVS,R), 1.0));
-        
+     
         // lamps
         for (int i = 0; i < 12; i++) {
         
